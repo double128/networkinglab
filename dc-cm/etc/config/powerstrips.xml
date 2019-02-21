@@ -1,0 +1,30 @@
+<powerstrips>
+	<serial>                                                                                                                   
+ 		<id>TrippLite PowerAlert Engine Version 15.04 (24 port)</id>  
+     		<async />                                                                                                         
+       		<outlets>24</outlets>                                                                                               
+      		<on>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" on</on>       
+                <off>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" off</off>       
+                <cycle>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" cycle</cycle>
+                <status>/etc/scripts/power-tripplite-v15-04 ${port} "${outlets}" status</status>          
+                <speed>9600</speed>                                                                         
+                <charsize>8</charsize>                                                                                             
+                <stop>1</stop>                                                                                                    
+                <parity>None</parity>                                                                                              
+	</serial>                                                                                                                  
+
+<network>        
+	<id>SNMP Controlled TrippLite (IETF)</id>
+	<probe>/bin/upsc rpc_${host} outlet.count</probe>
+	<on>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.on</on>
+	<off>/bin/upscmd -u pmpower -p `cat /etc/config/pmpower.passwd` rpc_${host} outlet.${outlet}.load.off</off>
+	<status>status=`/bin/upsc rpc_${host} outlet.${outlet}.status`; echo "outlet ${outlet} is ${status}"</status>
+	<speed>9600</speed>
+	<charsize>8</charsize>
+	<stop>1</stop>
+	<parity>None</parity>
+		<snmp>
+			<mib>ietf</mib>
+		</snmp>
+</network>
+</powerstrips>

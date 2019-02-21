@@ -1,0 +1,30 @@
+#cloud-config
+
+bootcmd:
+ - echo "127.0.1.1 $(hostname)" >> /etc/hosts
+ - echo "Added hostname entry to /etc/hosts"
+ - sudo echo "TERM=xterm-256color" >> /etc/profile
+ - echo "Set TERM value in /etc/profile"
+ - sudo echo "auto ens4" >> /etc/network/interfaces
+ - sudo echo "iface ens4 inet dhcp" >> /etc/network/interfaces
+ - sudo echo "iface ens4 inet6 dhcp" >> /etc/network/interfaces
+ - echo "Added ens4 entry to /etc/network/interfaces"
+ - sudo ifup ens4
+ - echo "Brought ens4 interface up"
+ - CONFIG_NETWORK=$(ip route | grep -w "dev ens3  scope link" | awk '{print $1}')
+ - STATIC_GATEWAY=$(ip route | grep -w "default" | awk '{print $3}')
+ - CONFIG_GATEWAY=$(cat /var/lib/dhcp/dhclient.ens4.leases | grep routers | awk '{print $3}' | tr -d ';')
+ - sudo ip route del $CONFIG_NETWORK dev ens3
+ - sudo ip route add 172.16.2.0/24 via $STATIC_GATEWAY dev ens3
+ - sudo ip route del default
+ - sudo ip route add default via $CONFIG_GATEWAY dev ens4
+ - echo "Deleted erroneous IP routes and added new ones"
+ - sudo rm -rf /etc/update-motd.d/*
+ - sudo echo "    KexAlgorithms diffie-hellman-group1-sha1" >> /etc/ssh/ssh_config
+ - IPV6_ADDR=$(curl http://169.254.169.254/openstack/latest/network_data.json -s | json_pp | grep ip_address | awk '{print $3}' | tr -d \" | tr -d \,)
+ - IPV6_GW=$(curl http://169.254.169.254/openstack/latest/network_data.json -s | json_pp | grep gateway | awk '{print $3}' | tr -d \" | tr -d \,)
+ - sudo ip -6 addr del ${IPV6_ADDR}/128 dev ens4
+ - sudo ip -6 addr add ${IPV6_ADDR}/64 dev ens4
+ - echo "Set proper IPv6 address"
+ - sudo ip -6 route add default via $IPV6_GW dev ens4
+ - echo "Added default route for IPv6"

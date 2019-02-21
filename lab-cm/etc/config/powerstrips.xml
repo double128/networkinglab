@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<powerstrips>
+<serial>
+	<id>APC 7902B (APPv6.4.6/AOSv6.4.6)</id>
+	<async/>
+	<outlets>16</outlets>
+	<on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+	<off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+	<cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+	<status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+	<speed>9600</speed>
+	<charsize>8</charsize>
+	<stop>1</stop>
+	<parity>None</parity>
+	<powerman>
+		<name>apc7902b</name>
+	</powerman>
+</serial>
+
+<serial>
+	<id>APC 7900B (APPv6.4.6/AOSv6.4.6)</id>
+	<async/>
+	<outlets>8</outlets>
+	<on>/etc/scripts/power-powerman-async ${port} "${outlets}" on</on>
+	<off>/etc/scripts/power-powerman-async ${port} "${outlets}" off</off>
+	<cycle>/etc/scripts/power-powerman-async ${port} "${outlets}" cycle</cycle>
+	<status>/etc/scripts/power-powerman-async ${port} "${outlets}" status</status>
+	<speed>9600</speed>
+	<charsize>8</charsize>
+	<stop>1</stop>
+	<parity>None</parity>
+	<powerman>
+		<name>apc7900b</name>
+	</powerman>
+</serial> 
+
+<network>
+	<id>APC NUT</id>
+	<async/>
+	<probe>/bin/upsc rpc_${host} outlet.count</probe>
+	<on>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" on</on>
+	<off>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" off</off>
+	<cycle>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" cycle</cycle>
+	<status>/etc/scripts/power-nut-async ${host} ${port} "${outlets}" status</status>
+	<speed>9600</speed>
+	<charsize>8</charsize>
+	<stop>1</stop>
+	<parity>None</parity>
+</network>
+
+</powerstrips>

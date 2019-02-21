@@ -1,0 +1,52 @@
+#!/bin/bash
+
+ok="\b\e[32mOK\e[0m"
+error="\e[31mERROR:\e[0m"
+
+spin() {
+	sp='/-\|'
+	printf ' '
+	while true; do
+		printf '\b%.1s' "$sp" 
+		sp=${sp#?}${sp%???}
+    		sleep 0.1
+	done
+}
+
+progress()
+{
+    bar="##################################################"
+    barlength=${#bar}
+    n=$(($1*barlength/100))
+    printf "\r[%-${barlength}s (%d%%)] " "${bar:0:n}" "$1"
+}
+
+clear
+spin & 
+pid=$!
+echo
+progress 0
+	echo -ne "\e[KHello there ...  "
+	sleep 5		
+	echo -ne "$ok  "
+	sleep 2
+progress 25
+	echo -ne "\e[KJust loading some stuff ...  "
+	sleep 5
+	echo -ne "$ok  "
+	sleep 2
+progress 50
+	echo -ne "\e[KHello ...  "
+	sleep 5
+	echo -ne "$ok  "
+	sleep 2
+progress 75
+	echo -ne "\e[KHello there ...  "
+	sleep 5
+	echo -ne "$ok  "
+	sleep 2
+progress 100
+kill $pid
+echo
+echo
+echo "SUCCESS!"

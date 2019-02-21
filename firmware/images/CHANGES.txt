@@ -1,0 +1,11 @@
+2019-01-14
+- Modified the source code for pam_adduser, this time changing the definition for USER_PMSHELL_ONLY from "bin/pmshell" to the custom login shell
+- This may be temporary as the modified module might cause issues, but we'll see
+- UPDATE: This image file is no longer considered temporary and is being used on all CMs after about 2 weeks of testing
+
+2019-01-11
+- Modified /etc/default/sshd_config to set "ChallengeResponseAuthentication" to "no" to permanently disable keyboard-interactive authentication
+
+2019-01-09
+- Created a brand new image for the v4.4.0 firmware for the CM7132
+- ONLY added the two required PAM modules, pam_exec and pam_adduser

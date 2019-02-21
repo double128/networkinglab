@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# -- CLEANUP --
+# This script runs once daily at 3AM to purge leftover user entries from lab sessions.
+# This will prevent bloat and stops leftover user data from overwhelming the CM. 
+#
+
+# Get all the user folders that currently exist in /etc/config/users
+USER_FOLDERS=$(ls /etc/config/users)
+
+# Iterate through the variable we created above, which is a list of folder names that correspond with usernames
+for user in $USER_FOLDERS; do
+	# Check if the user is currently logged in. If not, then purge their leftover user data
+	if ! [[ $(w | grep ${user%?}) && $(ps | grep ${user} | grep -v grep) ]]; then
+		# Remove user's entries from group
+		sudo sed -i "s/${user},//g; s/,${user}//g; s/${user}//g" /etc/config/group
+		# Remove user's entries from passwd
+		sudo sed -i "/${user}/D" /etc/config/passwd
+		# Delete user's folder
+		sudo rm -rf /etc/config/users/${user}
+		logger "Removed leftover entries for user ${user} from filesystem"
+	fi	
+done

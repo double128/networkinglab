@@ -1,0 +1,375 @@
+ ### VM MENU #####################################
+ # VM menu functions for the loginshell menu.	 #
+ # Used by loginshell_menu.			 #
+ #################################################
+
+### VM FUNCTIONS ###########################################################################################
+
+## Menu for VM options (build, delete, connect) 
+configureVM() {
+	PC_NUM=$1	# "1", "2", or "3"
+	COUNT=0
+	
+	local done=0
+	while [[ ${done} == 0 ]]; do
+		echo
+		
+		PC_STATE=$(echo -e "${VM_STATES}" | grep "PC${PC_NUM}" -A 5)
+  		PC_STATE_STATUS=$(echo "${PC_STATE}" | grep "State" | awk '{print $2}')
+		
+  		if [[ ! $(echo "${PC_STATE_STATUS}" | grep "NONEXISTENT") ]]; then 
+  			BUILD_VM="\e[38;5;240m[1] Build VM PC${PC_NUM}\e[0m"
+			DELETE_VM="\e[37;1m[2] Delete VM PC${PC_NUM}\e[0m"
+			CONNECT_VM="\e[37;1m[3] Connect to VM PC${PC_NUM}\e[0m"
+			PING_VM="\e[37;1m[4] Ping VM PC${PC_NUM}\e[0m"
+		else
+			BUILD_VM="\e[37;1m[1] Build VM PC${PC_NUM}\e[0m"
+			DELETE_VM="\e[38;5;240m[2] Delete VM PC${PC_NUM}\e[0m"
+			CONNECT_VM="\e[38;5;240m[3] Connect to VM PC${PC_NUM}\e[0m"
+			PING_VM="\e[38;5;240m[4] Ping VM PC${PC_NUM}\e[0m"
+		fi
+		
+		echo "${PC_STATE}"  		
+  		echo -e "
+  [VM MENU > Configure PC${PC_NUM}]----------------------------------+
+  ${BUILD_VM}
+  ${DELETE_VM}
+  ${CONNECT_VM}			 
+  ${PING_VM}			[X] Return to VM menu
+  +----------------------------------------------------------+
+  ${SHUTOFF_STATE}"
+		
+		read -p "  > " opt
+		if [[ ! $(echo "${PC_STATE_STATUS}" | grep "NONEXISTENT") ]]; then
+			case $opt in
+				1) clear; annoyed "spawn a VM that already exists";;
+				2) clear; deleteVM ${PC_NUM};;
+				3) clear; connectVM ${PC_NUM};;
+				4) clear; pingVM ${PC_NUM};;
+				x|X) local done=1; clear;;
+				*) clear;;
+			esac
+		else 
+			case $opt in
+				1) clear; buildVM ${PC_NUM};;
+				2) clear; annoyed "delete a VM that doesn't exist";;
+				3) clear; annoyed "connect to a VM that doesn't exist";;
+				4) clear; annoyed "ping a VM that doesn't exist";;
+				x|X) local done=1; clear;;
+				*) clear;;
+			esac
+		fi
+	done
+}
+
+## This is a fun easter egg! :^)
+annoyed() { 
+	local chk=$1
+	COUNT=$((COUNT+1))
+	if [ "${COUNT}" -le 5 ]; then
+		echo -e "\e[31;1mERROR:\e[0m You cannot ${chk}."
+	elif [ "${COUNT}" -gt 5 ] && [ "${COUNT}" -le 15 ]; then
+		echo -e "Ok, seriously. Stop that."
+	elif [ "${COUNT}" -gt 15 ] && [ "${COUNT}" -le 25 ]; then
+		echo -e "Stop."
+	elif [ "${COUNT}" -gt 25 ] && [ "${COUNT}" -le 50 ]; then
+		echo -e "This is getting reaaaaaally annoying."
+	elif [ "${COUNT}" -gt 50 ] && [ "${COUNT}" -le 75 ]; then
+		echo -e "Still doing this, huh?"
+	elif [ "${COUNT}" -gt 75 ] && [ "${COUNT}" -lt 100 ]; then
+		echo -e "Keep going, I've got a prize for you."
+	elif [[ "${COUNT}" == 100 ]]; then
+		stty -echo -icanon
+		clear
+		echo "Alright, here's your prize!"
+		sleep 5
+		echo "The void."
+		sleep 5
+		stty sane
+		exit 1
+	fi
+}
+		
+## Builds a VM based on specific parameters.
+buildVM() {		
+	if [[ $(echo "${VM_STATES}" | grep "PC$PC_NUM" -A 1 | grep "ACTIVE") ]]; then
+		echo "ERROR: VM already exists. Cannot create a VM if it already exists."
+	elif [[ $(echo "${VM_STATES}" | grep "PC$PC_NUM" -A 1 | grep "SHUTOFF") ]]; then
+		echo -e "ERROR: The VM is in the SHUTOFF state as the VM server was shut down at some point with this VM running. \nPlease delete the VM and then create it again."
+	else
+		read -p "Are you sure you want to create VM PC${PC_NUM}? [Y/N]: " -r choice
+		case "$choice" in
+			[yY][eE][sS]|[yY])	
+				echo
+				configEntry
+				echo
+				if [[ "$TYPE" == "ipv4" ]]; then
+					echo "Connecting to VM servers ... "
+					sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET -t serveradmin@10.41.30.244 bash -c "'
+						. /home/serveradmin/admin-openrc
+						. /home/serveradmin/IPCheck "${TYPE}" "${POD_NUM}" "${PC_NUM}"
+					'"
+					echo "Returning to menu ... "
+					updateVMStatus
+				elif [[ "$TYPE" == "ipv6" ]]; then
+					echo "Connecting to VM servers ... "
+					sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET -t serveradmin@10.41.30.244 bash -c "'
+						. /home/serveradmin/admin-openrc
+						. /home/serveradmin/IPCheck "${TYPE}" "${POD_NUM}" "${PC_NUM}"
+					'"
+					echo "Returning to menu ... "
+					updateVMStatus
+				elif [[ "$TYPE" == "both" ]]; then
+					echo "Connecting to VM servers ... "
+					sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET -t serveradmin@10.41.30.244 bash -c "'
+						. /home/serveradmin/admin-openrc
+						. /home/serveradmin/IPCheck "${TYPE}" "${POD_NUM}" "${PC_NUM}"
+					'"
+					echo "Returning to menu ... "
+					updateVMStatus
+				fi
+				local get_out=1
+				clear
+			;;
+			*) 	local get_out=1
+				clear
+			;;
+		esac
+	fi
+}
+
+## Asks users which IP addresses they want to assign to their VM
+configEntry() {
+	clear
+	PS3="> "
+	echo "Do you want to use IPv4, IPv6, or both?"
+	select choice in "IPv4" "IPv6" "Both" "Cancel"; do
+	case $REPLY in
+		1) 	TYPE="ipv4"
+			break
+		;;
+		2) 	TYPE="ipv6"
+			break
+		;;
+		3) 	TYPE="both"
+			break
+		;;
+		4)	break
+		;;
+		*) 	clear
+		;;
+	esac
+	done
+}
+
+# Deletes the VM.
+deleteVM() {
+	if ! [[ $(echo "${VM_STATES}" | grep "PC$PC_NUM" -A 1 | grep "ACTIVE") || $(echo "${VM_STATES}" | grep "PC$PC_NUM" -A 1 | grep "SHUTOFF") ]]; then
+		echo "ERROR: You cannot delete a VM that doesn't exist."
+	else
+		#local free_him=0
+		#while [[ ${free_him} == 0 ]]; do
+			read -p "Are you sure you want to delete VM PC${PC_NUM}? [Y/N]: " -r opt
+			case "$opt" in
+				[yY][eE][sS]|[yY])
+					echo
+					sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET serveradmin@10.41.30.244 bash -c "'
+						cd ~/
+						. admin-openrc
+						./DeleteInstance "${POD_NUM}" "${PC_NUM}"
+					'" 
+					free_him=1
+					echo "Returning to menu ... "
+ 		    			updateVMStatus
+				;;
+				n|N) 	free_him=1;;
+				*) 	clear;;
+			esac
+       			clear
+       		#done
+       	fi
+}
+
+# Allows SSH access into a VM
+connectVM() {
+	local ind_pcnum="$1_NUM"
+	FLIP=172.16.3.${POD_NUM}${PC_NUM}
+
+	if [[ $(echo "$VM_STATES" | grep $1 | grep "ACTIVE") ]]; then
+		read -p "Are you sure you want to connect to VM $1? [Y/N]: " -r choice 
+		case "$choice" in
+			y|Y)	clear
+				echo -e [ ubuntu@pod"$POD_NUM"pc"${PC_NUM}" \| FastEthernet0\/6@SW"${PC_NUM}" ]
+				#echo -e [ cirros@pod"$POD_NUM"pc"${PC_NUM}" \| FastEthernet0\/6@SW"${PC_NUM}" ]
+				#sudo ssh -i /etc/config/customscripts/keys/Pod${POD_NUM}.key -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o LogLevel=QUIET cirros@$FLIP
+				sudo ssh -i /etc/config/customscripts/keys/Pod${POD_NUM}.key -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o LogLevel=QUIET ubuntu@${FLIP}
+			;;
+			n|N) 	clear
+			;;
+			*) 	echo "Please select Y or N."
+			;;
+		esac
+		clear
+	else
+		echo -e "\e[31;1mERROR:\e[0m You cannot SSH into a machine that is not currently active.
+		                
+If you have already spawned a machine and are getting this error,
+return to the main menu, select \'Update VM state chart\', and try
+to connect again.
+"
+	fi
+}
+
+pingVM() {
+	clear
+	FLIP="172.16.3.${POD_NUM}${PC_NUM}"
+	ping -c 5 ${FLIP}
+}
+		
+
+### MENU FUNCTIONS #########################################################################################
+
+## This is ONLY called from loginshell_menu when accessing the VM menu for the first time
+startup() {
+	POD_NUM=$1
+        echo -n " > Getting VM states from server ... "
+        VM_STATES=$(sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET serveradmin@10.41.30.244 bash -c "'
+                cd ~/
+                . admin-openrc
+                ./CheckStatus "${POD_NUM}" | clide -f clide_colours
+        '")
+       	if [ -z "$VM_STATES" ]; then return 1; else return 0; fi  # If we don't get anything back, something went wrong
+}
+
+## Call this one to update, k?
+updateVMStatus() {
+        VM_STATES=$(sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET serveradmin@10.41.30.244 bash -c "'
+                cd ~/
+                . admin-openrc
+                ./CheckStatus "${POD_NUM}" | clide -f clide_colours
+        '")
+        if [ -z "$VM_STATES" ]; then
+        	/echo -e "\n  ERROR: There was a problem trying to update the VM status chart. Please try again later."
+	fi
+}
+
+## Update the status of the VMs in the background
+autoUpdateStatus() {
+	sleep 10
+	while :; do
+ 		VM_STATES=$(sudo ssh -o StrictHostKeyChecking=no -o LogLevel=QUIET serveradmin@10.41.30.244 bash -c "'
+ 	       	        cd ~/
+ 	       	        . admin-openrc
+ 	       	        ./CheckStatus "${POD_NUM}" | clide -f clide_colours
+ 	       	'")
+		sleep 10
+	done
+}
+
+helpMenu() {
+	local done=0
+	while [[ ${done} == 0 ]]; do
+		echo -e "
+  [HELP MENU] -------------------------------------+
+  [1] How to spawn a VM
+  [2] VM state meanings
+  [3] What does the ping function do?
+  [4] What does \"Update state chart\" do?
+  
+  [X] Return to main menu
+  ------------------------------------------------+"
+		
+		echo "  What do you need help with?" 
+		read -p "  > " help_opt
+		case $help_opt in
+			1)	clear
+				echo -e "
+  [Spawning a VM] ---------------------------------------------------+
+ 
+  In the VM menu, select one of the virtual PCs you wish to configure.
+  
+  If the VM you have selected is not currently \e[32;1mACTIVE\e[0m, you can select  
+  \"Build VM\". You are then asked to select if you want your VM to use
+  IPv4, IPv6, or both. 
+  
+  Then, you must enter in your desired IP addressing information for
+  the virtual machine. After this, the server will then automatically
+  spawn your virtual machine, which may be accessed through SSH when
+  the build has completed.
+ 
+  Pressing ENTER will set the values to their defaults, which can be
+  seen in the square brackets when you are prompted to enter a value.
+  Pressing CTRL+C will cancel the VM build and bring you to the menu.
+  
+  You cannot create a VM if it already exists. If you wish to spawn 
+  the VM again, you must delete it first.
+  
+  +-----------------------------------------------------------------+
+                         < Press any key to return to the help menu >"
+                         
+  				read -n 1 -s -r
+  				clear
+  			;;
+  			2)	clear
+  				echo -e "
+  [VM state meanings] ---------------------------------------------------+
+  
+  \e[32;1mACTIVE\e[0m	The virtual machine is ready to be accessed and used.
+  
+  \e[47;30;1mNONEXISTENT\e[0m	The virtual machine does not exist and can be spawned.
+  
+  \e[33;1mBUILD\e[0m		The virtual machine is currently being built.
+  
+  \e[31;1mERROR\e[0m		An error has prevented the virtual machine from spawning.
+  
+  +----------------------------------------------------------------------+
+  			      < Press any key to return to the help menu >" 
+				
+				read -n 1 -s -r
+				clear
+  			;;
+  			3)	echo -e "
+  [VM ping function] ----------------------+
+  
+  "
+  			;;
+  			4) ;;
+  			x|X) local done=1; clear;;
+  			*) clear;;
+  		esac
+  	done
+}
+
+# Now that we have a list of the states of the VMs, we can show a menu.
+optionMenu() {
+	#bash /etc/config/customscripts/push_update ${POD_NUM} &
+	#update_pid=$!
+	
+	local pass=0
+	while [[ ${pass} == 0 ]]; do       
+ 	 	echo -e "\n  [Pod ${POD} Virtual Machines]------------------------+"      		
+ 	 	echo "$VM_STATES"
+ 	 	echo -e "  [VM MENU] -------------------------------------------+
+  [1] Configure PC1
+  [2] Configure PC2		
+  [3] Configure PC3	 	 
+  [4] Update state chart	 [X] Return to main menu
+  +----------------------------------------------------+"      		
+ 	 	if [[ $(echo "$VM_STATES" | grep "SHUTOFF") ]]; then 
+			echo -e "\n  \e[93mWARNING:\e[0m It seems you have a VM in the \e[91mSHUTOFF\e[0m state. You must delete this VM before spawning it again."
+		fi
+		
+		read -p "  > " opt_menu 
+                case $opt_menu in
+                       	1) clear; configureVM 1;;
+                        2) clear; configureVM 2;;
+                        3) clear; configureVM 3;;
+                        4) clear; echo " > Updating VM state chart ..."; updateVMStatus;;
+# FIX LATER		h|H) clear; helpMenu;;
+			x|X) break;;
+			*) clear;;					
+                esac
+        done
+        clear
+	return 0	# Return this to signify that everything's working as intended
+}

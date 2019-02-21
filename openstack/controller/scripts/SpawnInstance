@@ -1,0 +1,221 @@
+#!/bin/bash
+#
+# -- SpawnInstance -- 
+# Script for spawning VM instances for students.
+#
+
+### VARIABLES ##################################################################################################################################################
+
+## Fed in from IPCheck ###
+POD_NUM=$1
+PC_NUM=$2
+CONFIG_NET_IP=$3
+CONFIG_NET_GATEWAY=$4	
+CONFIG_PORT_IP=$5
+CONFIG_NET6_IP=$6
+CONFIG_NET6_GATEWAY=$7	
+CONFIG_PORT6_IP=$8
+TYPE=$9
+
+## Variables used to get IDs ###
+STATIC_SUBNET_NAME="Pod${POD_NUM}_PC${PC_NUM}_Static_Subnet"
+CONFIG_SUBNET_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Subnet"
+CONFIG_SUBNET6_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Subnet_V6"
+STATIC_PORT_NAME="Pod${POD_NUM}_PC${PC_NUM}_Static_Port"
+CONFIG_PORT_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Port"
+ROUTER_NAME="Pod${POD_NUM}_PC${PC_NUM}_Router"
+NETWORK_NAME="Pod${POD_NUM}_PC${PC_NUM}_Network"
+
+## Additional variables ###
+CONFIG_SG_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_SG"						
+VM_NAME="Pod${POD_NUM}_PC${PC_NUM}_Instance"				
+KEY_NAME="Pod${POD_NUM}-Key"
+		
+## Colour codes ###							
+ok="\e[32mOK\e[0m"								
+error="\e[31mERROR:\e[0m"
+warning="\e[33mWARNING: \e[0m"
+
+### BEGIN BUILD ################################################################################################################################################
+
+# If we can find the VM name in the server list, then prevent users from building it. This check is also done in the CM's vm_menu, but this is an extra check.
+
+if [[ $(openstack server list -f value | grep "${VM_NAME}") ]]; then
+	echo -e "${error} A VM instance for this PC already exists."
+	exit 1
+else
+	stty -echo -icanon
+
+	# Check if the VM is already being created at this very moment. Stops students from messing up and causing conflicts, as I probably would end up doing.
+	# We basically look in "ps" and see if there's multiple instances of THIS VM being built at this very moment. If there's more than 1, then we exit. 
+	## TODO: This doesn't work for some reason? Why?
+#	if [[ $(ps aux | grep "SpawnInstance ${POD_NUM} ${PC_NUM} ???" | grep -v "grep" | grep -o "DeleteInstance ${POD_NUM} ${PC_NUM}" | uniq -d) ]]; then
+	if [[ $(ps aux | grep -v "grep" | grep "Ss+" | grep -o "SpawnInstance ${POD_NUM} ${PC_NUM}" | uniq -d) ]]; then		
+		echo -e "${error} The VM \"Pod${POD_NUM} PC${PC_NUM}\" is already in the process of being created.
+"
+		exit 1
+	else
+		echo "[Building VM \"Pod${POD_NUM} PC${PC_NUM}\"]"
+
+		# Grab the ID for PodX_PCY_Network in "openstack network list"
+		echo -n "Getting virtual network ID ... "
+		NETWORK_ID=$(openstack network list -f value | awk '{if ($2 == "'${NETWORK_NAME}'") print $1}')
+		echo -e ${ok} 
+
+		echo -n "Getting router ID ... "  # TODO: LIKELY DEPRECATED
+		ROUTER_ID=$(openstack router list -f value | awk '{if ($2 == "'${ROUTER_NAME}'") print $1}')
+		echo -e ${ok}
+
+
+		## Create subnet ################################################################################################
+		
+		# We check here if the subnet actually exists still; in normal circumstances, this will return an empty variable.
+		echo -n "Checking for leftover subnet data ... "
+		CONFIG_SUBNET_ID=$(openstack subnet list -f value | awk '{if ($2 == "'${CONFIG_SUBNET_NAME}'") print $1}')	
+		CONFIG_SUBNET6_ID=$(openstack subnet list -f value | awk '{if ($2 == "'${CONFIG_SUBNET6_NAME}'") print $1}')	
+		echo -e ${ok}
+	
+		D=0; while [[ ${D} == 0 ]]; do
+			if [ -z ${CONFIG_SUBNET_ID} ] && [ -z ${CONFIG_SUBNET6_ID} ]; then
+				echo -n "Creating subnets ... "
+				openstack subnet create --subnet-range ${CONFIG_NET_IP} --gateway ${CONFIG_NET_GATEWAY} --network ${NETWORK_ID} ${CONFIG_SUBNET_NAME} &>/dev/null 
+				openstack subnet create --subnet-range ${CONFIG_NET6_IP} --gateway ${CONFIG_NET6_GATEWAY} --network ${NETWORK_ID} --ip-version 6 --ipv6-ra-mode dhcpv6-stateful --ipv6-address-mode dhcpv6-stateful ${CONFIG_SUBNET6_NAME} &>/dev/null
+				
+				D=1
+				echo -e ${ok}
+			else
+				echo -e "${warning} The subnet was not deleted properly the last time the VM was destroyed. Deleting and trying again ... "
+				if ! [ -z ${CONFIG_SUBNET_ID} ] && [ -z ${CONFIG_SUBNET6_ID} ]; then	 # If the IPv4 subnet exists, but the IPv6 subnet does not, then ...
+					openstack subnet delete ${CONFIG_SUBNET_ID} &>/dev/null
+					CONFIG_SUBNET_ID=""
+				elif ! [ -z ${CONFIG_SUBNET6_ID} ] && [ -z ${CONFIG_SUBNET_ID} ]; then	 # If the IPv6 subnet exists, but the IPv4 subnet does not, then ...
+					openstack subnet delete ${CONFIG_SUBNET6_ID} &>/dev/null
+					CONFIG_SUBNET6_ID=""
+				elif ! [ -z ${CONFIG_SUBNET_ID} ] && ! [ -z ${CONFIG_SUBNET6_ID} ]; then # If both subnets exist, then ...
+					openstack subnet delete ${CONFIG_SUBNET_ID} &>/dev/null
+					openstack subnet delete ${CONFIG_SUBNET6_ID} &>/dev/null
+					CONFIG_SUBNET_ID=""
+					CONFIG_SUBNET6_ID=""
+				fi 
+			fi
+		done
+
+		echo -n "Getting new subnet IDs ... "
+		CONFIG_SUBNET_ID=$(openstack subnet list -f value | awk '{if ($2 == "'${CONFIG_SUBNET_NAME}'") print $1}')	
+		CONFIG_SUBNET6_ID=$(openstack subnet list -f value | awk '{if ($2 == "'${CONFIG_SUBNET6_NAME}'") print $1}')	
+		echo -e ${ok}
+
+		echo -n "Verifying subnet creation ... "
+		TEMP_SUBLIST="$(openstack subnet list)"
+		if [[ $(echo "${TEMP_SUBLIST}" | grep "${CONFIG_SUBNET_ID}") && $(echo "${TEMP_SUBLIST}" | grep "${CONFIG_SUBNET6_ID}") ]]; then
+			echo -e ${ok}
+		else
+			echo -e "${error} The subnet was not properly created. Please ask a lab attendant for help."
+			exit 1
+		fi
+
+		## Add Subnet to Router ########################################################################
+		# Router to support DHCPv6, without this nothing for IPv6 works
+
+	#	echo -n "Adding subnets to virtual router ... "
+	#	openstack router add subnet ${ROUTER_ID} $CONFIG_SUBNET6_ID	
+	#	echo -e $ok
+
+	
+		## Create security group #######################################################################
+		# Each instance needs its own unique security group instead of a catch-all 0.0.0.0/0 security group
+		# that is quite insecure and dangerous to implement... 
+
+		#echo -n "Creating security group ... "
+		#openstack security group create ${CONFIG_SG_NAME} &>/dev/null
+		#echo -e ${ok}
+		
+		#echo -n "Getting security group ID ... "
+		#CONFIG_SG_ID=$(openstack security group list -f value | awk '{if ($2 == "'${CONFIG_SG_NAME}'") print $1}')
+		#echo -e ${ok} 
+		
+		#echo -n "Adding security group rules ... "
+		#EXTRA_IPV4_RULE=$(openstack security group show ${CONFIG_SG_ID} -f value | grep "IPv4" | awk '{print $4}' | cut -d\' -f2)
+		#EXTRA_IPV6_RULE=$(openstack security group show ${CONFIG_SG_ID} -f value | grep "IPv6" | awk '{print $4}' | cut -d\' -f2)
+		#openstack security group rule delete ${EXTRA_IPV4_RULE} &>/dev/null
+		#openstack security group rule delete ${EXTRA_IPV6_RULE} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto icmp --ingress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto icmp --egress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto tcp --ingress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto tcp --egress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto udp --ingress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip ${CONFIG_NET_IP} --proto udp --egress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip "169.254.169.254" --proto tcp --dst-port 80 --ingress ${CONFIG_SG_NAME} &>/dev/null
+		#openstack security group rule create --remote-ip "169.254.169.254" --proto tcp --dst-port 80 --egress ${CONFIG_SG_NAME} &>/dev/null
+		#echo -e ${ok}
+		
+		#CONFIG_SG_ID=$(openstack security group list -f value | awk '{if ($2 == "'${CONFIG_SG_NAME}'") print $1}')
+
+		## Create ports ################################################################################
+		# Dual-stack Config Port (IPv4 and IPv6). This port defines the network and security groups used.
+		
+		echo -n "Creating configurable port ... "
+		#openstack port create --network ${NETWORK_ID} --fixed-ip subnet=${CONFIG_SUBNET_ID},ip-address=${CONFIG_PORT_IP} --fixed-ip subnet=${CONFIG_SUBNET6_ID},ip-address=${CONFIG_PORT6_IP} --security-group ${CONFIG_SG_NAME} ${CONFIG_PORT_NAME} &>/dev/null
+		openstack port create --network ${NETWORK_ID} --fixed-ip subnet=${CONFIG_SUBNET_ID},ip-address=${CONFIG_PORT_IP} --fixed-ip subnet=${CONFIG_SUBNET6_ID},ip-address=${CONFIG_PORT6_IP} ${CONFIG_PORT_NAME} &>/dev/null
+		echo -e ${ok}
+
+		echo -n "Getting port ID ... "
+		CONFIG_PORT_ID=$(openstack port show "${CONFIG_PORT_NAME}" | grep -w id | awk '{print $4}' )
+		echo -e ${ok}
+
+		echo -n "Verifying port creation ... "
+		if [[ $(openstack port list | grep "${CONFIG_PORT_ID}") ]]; then
+			echo -e ${ok}
+		else
+			echo -e "${error} The port was not created properly. Please ask a lab attendant for help."
+		fi
+	
+		## Create VM instance ###########################################################################
+
+		echo -n "Getting static port ID ... "
+		STATIC_PORT_ID=$(openstack port show "$STATIC_PORT_NAME" | grep -w id | awk '{print $4}' )
+		echo -e ${ok}
+
+		echo -n "Getting image ID ... "
+		IMAGE_ID=$(openstack image list -f value | awk '{if ($2 == "'ubuntu-xenial-image'") print $1}')
+		echo -e ${ok}
+
+		echo -n "Getting flavour ID ... "
+		FLAVOUR_ID=$(openstack flavor list -f value | awk '{if ($2 == "'salty'") print $1}')
+		echo -e ${ok}
+	
+		echo -n "Creating VM instance ... "
+		openstack server create --image ${IMAGE_ID} --flavor ${FLAVOUR_ID} --key-name ${KEY_NAME} --port ${STATIC_PORT_ID} --port ${CONFIG_PORT_ID} --user-data /home/serveradmin/cloud-init --wait ${VM_NAME} &>/dev/null
+		#openstack server create --image ${IMAGE_ID} --flavor ${FLAVOUR_ID} --key-name ${KEY_NAME} --port ${STATIC_PORT_ID} --port ${CONFIG_PORT_ID} --user-data /home/serveradmin/Instance_Initialization --wait ${VM_NAME} &>/dev/null
+		echo -e ${ok}
+
+		echo -n "Verifying VM instance creation ... "
+		if [[ $(openstack server list | grep "$VM_NAME") ]]; then
+			echo -e $ok
+		else
+			echo -e "$error The VM instance could not be created. Please ask a lab technician for assistance."
+			exit 1
+		fi
+
+		echo -e "
+\e[32;1mSUCCESS!\e[0m
+The VM \"Pod${POD_NUM} PC${PC_NUM}\" has been spawned with the following IP addresses:\n"
+		
+		if [[ "${TYPE}" == "ipv4" ]] || [[ "${TYPE}" == "both" ]]; then 
+			echo -e "[IPv4]
+Host address:		${CONFIG_PORT_IP}
+Gateway address:	${CONFIG_NET_GATEWAY}
+Network address:	${CONFIG_NET_IP}"
+		fi
+		
+		echo
+		
+		if [[ "${TYPE}" == "ipv6" ]] || [[ "${TYPE}" == "both" ]]; then
+			echo -e "[IPv6]
+Host address:		${CONFIG_PORT6_IP}
+Gateway address:	${CONFIG_NET6_GATEWAY}
+Network address:	${CONFIG_NET6_IP}"
+		fi
+		stty sane
+	fi
+fi

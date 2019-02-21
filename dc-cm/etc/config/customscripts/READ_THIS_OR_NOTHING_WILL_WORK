@@ -1,0 +1,7 @@
+You will need to create a symlink for "loginshell_menu_dc", as the pam_adduser PAM module has the script name "loginshell_menu" hard-coded into it. This means that the DC pods' "loginshell_menu_dc" will not be recognized by the modified PAM module.
+
+Create it as follows:
+
+	ln -s loginshell_menu_dc loginshell_menu
+
+Now the DC CMs will work properly.

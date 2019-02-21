@@ -1,0 +1,147 @@
+
+  ##############################
+  #      LAB CM VARIABLES      #
+  ##############################
+
+# Used to dynamically determine the identity of the CM ("Who am I?")
+rackCheck() {
+	# Get this CM's "Access" IP address and rack number
+	export RACKIP=$(ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}')
+	export RACK=$(echo ${RACKIP: -1})	
+	
+	# POD2 will always be the rack number multiplied by 2
+	export POD2=$(echo $(($RACK * 2)))
+	
+	# POD1 will always be POD2 minus 1
+	export POD1=$(echo $(($POD2 - 1)))
+	
+	# Pod IPs will always be the pod number affixed to the IP address "172.16.0."
+	export POD1IP="172.16.0.${POD1}"
+	export POD2IP="172.16.0.${POD2}"
+}
+	
+# Trap specific command invocations
+traps() {
+	trap "" SIGINT SIGQUIT SIGSTP 	# Trap CTRL+C and CTRL+Z; basically, prevent users from accidentally logging themselves out
+	
+	# Old traps for pre-pmshell change
+	#trap "" SIGINT SIGQUIT SIGTSTP          # Trap CTRL+C and CTRL+Z
+	#trap "kill -9 $PPID" EXIT		# Trap CTRL+D and other EXIT invocations
+	#trap "sudo ip route add 172.16.0.251/32 via `ifconfig eth0 | grep "inet addr" | cut -d':' -f2 | cut -d' ' -f1` src `echo $SSH_CONNECTION | cut -d' ' -f3`; kill -9 $PPID" EXIT	# Trap CTRL+D and other exit evocations
+}
+
+# Determine what pod the user is connected to so we can display this information in the menu
+variablesSSH() {
+	# Get the "SSH_CONNECTION" environment variable
+	SSH_IP="$(echo $SSH_CONNECTION | awk '{print $3}')"
+
+	case $SSH_IP in
+		"$POD1IP")	POD=$POD1
+				PORT1="pmshell -l port01"; PORT2="pmshell -l port02" 
+				PORT3="pmshell -l port03"; PORT4="pmshell -l port04"
+				PORT5="pmshell -l port05"; PORT6="pmshell -l port06" 
+				PORT7="pmshell -l port07"; PORT8="pmshell -l port08"
+			
+				PORT1_POWER="port32_0"; PORT2_POWER="port32_1"
+				PORT3_POWER="port32_2"; PORT4_POWER="port32_3"
+				PORT5_POWER="port32_4"; PORT6_POWER="port32_5"
+				PORT7_POWER="port32_6"; PORT8_POWER="port32_7"
+			;;
+				
+		"$POD2IP")	POD=$POD2
+				PORT1="pmshell -l port09"; PORT2="pmshell -l port10" 
+				PORT3="pmshell -l port11"; PORT4="pmshell -l port12"
+				PORT5="pmshell -l port13"; PORT6="pmshell -l port14" 
+				PORT7="pmshell -l port15"; PORT8="pmshell -l port16"
+			
+				PORT1_POWER="port32_8"; PORT2_POWER="port32_9"                                                     
+				PORT3_POWER="port32_10"; PORT4_POWER="port32_11"
+				PORT5_POWER="port32_12"; PORT6_POWER="port32_13"
+				PORT7_POWER="port32_14"; PORT8_POWER="port32_15"
+			;;
+			*)	echo "ERROR: You're not a member of any pod groups."
+				exit 1
+			;;
+	esac
+}
+
+# Fancy graphix for fun times
+graphics() {
+	# Make the Pod number sit nicely within the graphic                                                         
+        if [[ ${#POD} == 2 ]]; then POD_NUM_DISPLAY="${POD}"
+        else POD_NUM_DISPLAY="${POD} "                    
+        fi 
+
+	loginshell_menu="
+  [User $(whoami)]
+  [######################################################]
+  |\e[48;5;17m                                                      \e[0m|
+  |\e[38;5;19;48;5;17m    ooooo     ooo   .oooooo.   ooooo ooooooooooooo    \e[0m|
+  |\e[38;5;20;48;5;17m    '888'     '8'  d8P'  'Y8b  '888' 8'   888   '8    \e[0m|
+  |\e[38;5;21;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;27;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;33;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;39;48;5;17m     '88.    .8'  '88b    d88'  888       888         \e[0m|
+  |\e[38;5;45;48;5;17m       'YbodP'      '8bood8'   o888o     o888o        \e[0m|
+  |\e[38;5;159;48;5;17m             Challenge. Innovate. Connect.            \e[0m|
+  |\e[48;5;17m                                                      \e[0m|
+  +--------------\e[1;38;5;27;48;5;45m ACCESS SERVER - RACK ${RACK} \e[0m----------------+
+  |                       Pod ${POD_NUM_DISPLAY}                         |
+  |                                                      |
+  |   Welcome to the \e[1;38;5;33mUOIT Networking Lab\e[0m access server.  |
+  |                                                      |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |                                                      |
+  |   For support, visit \e[38;5;45mlabsupport.networkinglab.ca\e[0m.    |
+  |                                                      |
+  [######################################################]
+
+  [MAIN MENU]--------------------------------------------+
+  [1] R1
+  [2] R2
+  [3] R3
+  [4] R4
+  [5] SW1 (DLS1)
+  [6] SW2 (DLS2)
+  [7] SW3 (ALS1)
+  [8] SW4 (ALS2)
+
+  [P] Power menu				  [X] Exit
+  +------------------------------------------------------+"
+}
+
+# Colours for power menu
+colours() {
+	OFF="\e[31mOFF\e[0m"
+	ON="\e[32mON\e[0m"
+}
+
+set_ip_route() {
+        PODNO=$1
+        indPODIP=POD${PODNO}IP
+	
+        if [[ $(netstat -natpe | grep sshd | awk '{if ($4 == "'${!indPODIP}:22'") print $9}' | cut -d / -f1 | grep ${PPID}) ]]; then
+                # Non keyboard-interactive authentication, where PPID = sshd [priv]'s PID
+                ip route add 172.16.0.251/32 via ${RACKIP} src ${!indPODIP}
+                exit 0
+
+	# THIS IS PROBABLY DEPRECATED WILL TEST KTHX
+        #elif [[ $(ps | grep ${PAM_USER} | grep pam | grep ${PPID}) ]]; then
+        #        # Keyboard-interactive authentication, where PPID = sshd [pam]'s PID
+        #        PRIV_PID=$(ps | grep ${PAM_USER} | grep $PPID -A3 -B3 | grep priv | awk '{print $1}')
+	#
+        #        # Check netstat with the [priv] PID instead of the [pam] PID
+        #        if [[ $(netstat -natpe | grep sshd | awk '{if ($4 == "'${!indPODIP}:22'") print $9}' | cut -d / -f1 | grep ${PRIV_PID}) ]]; then
+        #                ip route add 172.16.0.251/32 via ${RACKIP} src ${!indPODIP}
+        #                exit 0
+        #        fi
+        fi
+}
+
+remove_route() {
+	logger "Removed leftover IP route"
+	sudo ip route del 172.16.0.251/32 &> /dev/null 2>&1
+}

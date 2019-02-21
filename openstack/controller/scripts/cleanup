@@ -1,0 +1,15 @@
+#!/bin/bash
+# General cleanup script run as a cron job at 3AM
+
+. admin-openrc
+
+SERVER_LIST=$(openstack server list)
+for PODS in {1..16}; do
+	for PCS in {1..3}; do
+		if [[ $(echo ${SERVER_LIST} | grep "Pod${PODS}_PC${PCS}_Instance") ]]; then
+			logger "Found leftover VM: Pod${PODS} PC${PCS}"
+			. /home/serveradmin/DeleteInstance ${PODS} ${PCS}
+		fi
+	done
+done
+		

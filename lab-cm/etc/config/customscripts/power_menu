@@ -1,0 +1,193 @@
+
+  #########################################
+  # 	   LAB POWER MENU FUNCTIONS	  #
+  #########################################
+
+powerQuery() {
+	# Ignore any input to prevent the loading bar from being messed with
+	stty igncr
+	echo -n " > Querying power status"
+    	
+    	# We're using Bash 2.05, ergo a VERY old verison. So we can't use {1..8} and have to use 1 2 3 4...
+        for i in 1 2 3 4 5 6 7 8; do
+        	ind_PORT="PORT${i}_POWER"
+        	if [[ $(powerman -Q ${!ind_PORT} | grep 'off:     port') ]]; then
+  			export port${i}_output="$(echo -e "${OFF}")"
+		elif [[ $(powerman -Q ${!ind_PORT} | grep 'on:      port') ]]; then
+  			export port${i}_output="$(echo -e "${ON}")"
+  		fi
+  		echo -n "."
+	done
+	stty sane
+}
+
+updatePowerState() {
+	PORT_NUM=$1
+	local ind_PORT_POWER="PORT${PORT_NUM}_POWER"
+        
+        if [[ $(powerman -Q ${!ind_PORT_POWER} | grep 'off:     port') ]]; then
+		export port${PORT_NUM}_output="$(echo -e ${OFF})"
+	elif [[ $(powerman -Q ${!ind_PORT_POWER} | grep 'on:      port') ]]; then
+		export port${PORT_NUM}_output="$(echo -e ${ON})"
+	fi
+}	
+
+# Changes an individual device's power state, either to OFF or ON, depending on the
+# current state of the device.
+powerStateToggle() {
+	local D=0; while [[ ${D} == 0 ]]; do
+		clear
+		echo "
+  Select a device to toggle ON/OFF:
+  [1] R1  -- ${port1_output}
+  [2] R2  -- ${port2_output}
+  [3] R3  -- ${port3_output}
+  [4] R4  -- ${port4_output}
+  [5] SW1 -- ${port5_output}
+  [6] SW2 -- ${port6_output}
+  [7] SW3 -- ${port7_output}
+  [8] SW4 -- ${port8_output}
+  
+  [X] Cancel"
+		read -p "  > " opt
+		case $opt in
+			1) toggleFunction 1; updatePowerState 1; local D=1;;
+			2) toggleFunction 2; updatePowerState 2; local D=1;;
+			3) toggleFunction 3; updatePowerState 3; local D=1;;
+			4) toggleFunction 4; updatePowerState 4; local D=1;;
+			5) toggleFunction 5; updatePowerState 5; local D=1;;
+			6) toggleFunction 6; updatePowerState 6; local D=1;;
+			7) toggleFunction 7; updatePowerState 7; local D=1;;
+			8) toggleFunction 8; updatePowerState 8; local D=1;;
+			x|X) D=1; break;;
+			*) clear;;
+		esac
+	done
+}
+
+toggleFunction() {
+	local PORT_NUM=$1
+	local ind_PORT_VARIABLE="port${PORT_NUM}_output"
+	local ind_PORT_TOGGLE="PORT${PORT_NUM}_POWER"
+	local ind_PORT_NAME="PORT${PORT_NUM}_NAME"
+	
+	if [[ ${!ind_PORT_VARIABLE} == $(echo -e ${ON}) ]]; then
+		powerman -0 ${!ind_PORT_TOGGLE} &>/dev/null
+		echo
+		echo -e "  ${!ind_PORT_NAME} is now ${OFF}."
+		sleep 2
+	elif [[ ${!ind_PORT_VARIABLE} == $(echo -e ${OFF}) ]]; then
+		powerman -1 ${!ind_PORT_TOGGLE} &>/dev/null
+		echo
+		echo -e "  ${!ind_PORT_NAME} is now ${ON}."
+		sleep 2
+	fi
+}
+
+allDevicesOff() {
+	if [[ ${POD} == ${POD1} ]]; then port_range="port32_[0-7]";
+	elif [[ ${POD} == ${POD2} ]]; then port_range="port32_[8-15]";
+	fi
+	
+	local state_count=0
+	for i in 1 2 3 4 5 6 7 8; do
+		local ind_PORT_STATE="port${i}_output"
+		if [[ ${!ind_PORT_STATE} == $(echo -e ${OFF}) ]]; then
+			local state_count=$((state_count+1))
+		fi
+	done
+	
+	if [[ ${state_count} == 8 ]]; then
+		echo
+		echo -e "  All ports are already ${OFF}."
+		sleep 2
+	else
+	
+	local D=0; while [[ ${D} == 0 ]]; do
+		read -p "Shut down all pod devices? [Y/N]: " opt
+		case $opt in
+			[yY][eE][sS]|[yY])
+				local D=1
+				powerman -0 ${port_range}
+				sleep 1
+				clear
+				powerQuery
+			;;
+			*)	clear
+				local D=1
+				break
+			;;
+		esac
+	done
+	fi
+}
+
+allDevicesOn() {
+	if [[ ${POD} == ${POD1} ]]; then port_range="port32_[0-7]";
+	elif [[ ${POD} == ${POD2} ]]; then port_range="port32_[8-15]";
+	fi
+	
+	local state_count=0
+	for i in 1 2 3 4 5 6 7 8; do
+		local ind_PORT_STATE="port${i}_output"
+		if [[ ${!ind_PORT_STATE} == $(echo -e ${ON}) ]]; then
+			local state_count=$((state_count+1))
+		fi
+	done
+	
+	if [[ ${state_count} == 8 ]]; then
+		echo
+		echo -e "  All ports are already ${ON}."
+		sleep 2
+	else
+	
+	local D=0; while [[ ${D} == 0 ]]; do
+		read -p "Switch on all pod devices? [Y/N]: " opt
+		case $opt in
+			[yY][eE][sS]|[yY])
+				local D=1
+				powerman -1 ${port_range}
+				sleep 1
+				clear
+				powerQuery
+			;;
+			*)	clear
+				local D=1
+				break
+			;;
+		esac
+	done
+	fi
+}
+
+powerMenu() {	
+	local D=0
+	while [[ ${D} == 0 ]]; do
+		clear
+		
+		echo -e "
+  [Pod ${POD} Power States] ---------------------+
+  R1 Status:    ${port1_output}
+  R2 Status:    ${port2_output}
+  R3 Status:    ${port3_output}
+  R4 Status:    ${port4_output}
+  SW1 Status:   ${port5_output}
+  SW2 Status:   ${port6_output}
+  SW3 Status:   ${port7_output}
+  SW4 Status:   ${port8_output}
+  
+  [POWER MENU] -----------------------------+
+  [1] Change power state of device
+  [2] Turn on all devices
+  [3] Turn off all devices
+  [X] Return to main menu"
+
+		read -p "  > " opt
+		case $opt in 
+			1) powerStateToggle;;
+			2) allDevicesOn;;
+			3) allDevicesOff;;
+			x|X) clear; local D=1; break;;
+		esac
+	done
+}

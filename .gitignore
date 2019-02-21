@@ -1,0 +1,6 @@
+# Don't track folders that don't need to be put on Github
+OLD/
+config-backups/
+
+# Don't track Remarkable swapfiles
+*.swp

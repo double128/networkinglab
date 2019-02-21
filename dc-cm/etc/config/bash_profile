@@ -1,0 +1,5 @@
+#!/bin/sh
+
+alias top="TERM=xterm top"
+set -o ignoreeof
+PS1="\e[32;1m\u@\h\e[0m:\e[34m\w\e[0m\$ "

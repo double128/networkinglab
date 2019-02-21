@@ -1,0 +1,143 @@
+  #######################################################
+  #    Source file for variables needed by scripts      #
+  #######################################################
+
+rackCheck() {
+	# Get this CM's "Access" IP address and rack number
+	export RACKIP=$(ifconfig eth0 | grep 'inet addr' | cut -d: -f2 | awk '{print $1}')
+	export RACK=$(echo ${RACKIP: -1})	
+	
+	# Pod4 will always be the rack number multiplied by 4
+	export POD4=$(echo $(($RACK * 4)))
+	
+	# Pod3 will always be Pod4 minus 1
+	export POD3=$(echo $(($POD4 - 1)))
+	
+	# Pod2 will always be Pod4 minus 2
+	export POD2=$(echo $(($POD4 - 2)))
+	
+	# Pod1 will always be Pod4 minus 3
+	export POD1=$(echo $(($POD4 - 3)))
+	 
+	# DC Pod IPs will always be the pod number affixed to the IP address "172.16.2."
+	export POD1IP="172.16.2.${POD1}"
+	export POD2IP="172.16.2.${POD2}"
+	export POD3IP="172.16.2.${POD3}"
+	export POD4IP="172.16.2.${POD4}"
+}
+
+traps() {
+        trap "" SIGINT SIGQUIT SIGTSTP          # Trap CTRL+C and CTRL+Z
+        
+	# Not needed with pure shell implementation :J
+	#trap "kill -9 $PPID" EXIT               # Trap CTRL+D and other exit evocations
+}
+
+variablesSSH() {
+	# Get the "SSH_CONNECTION" environment variable
+	SSH_IP="$(echo $SSH_CONNECTION | awk '{print $3}')"
+
+	case $SSH_IP in
+		"$POD1IP")	POD=$POD1
+				PORT1="pmshell -l port01"; PORT2="pmshell -l port02" 
+				PORT3="pmshell -l port03"; PORT4="pmshell -l port04"
+				PORT5="pmshell -l port05"; PORT6="pmshell -l port06" 
+			
+				PORT1_POWER="port32_0"; PORT2_POWER="port32_1"
+				PORT3_POWER="port32_2"; PORT4_POWER="port32_3"
+				PORT5_POWER="port32_4"; PORT6_POWER="port32_5"
+			;;
+		"$POD2IP")	POD=$POD2
+				PORT1="pmshell -l port07"; PORT2="pmshell -l port08"
+				PORT3="pmshell -l port09"; PORT4="pmshell -l port10"
+				PORT5="pmshell -l port11"; PORT6="pmshell -l port12"
+				
+				PORT1_POWER="port32_6"; PORT2_POWER="port32_7"
+                                PORT3_POWER="port32_8"; PORT4_POWER="port32_9"
+                                PORT5_POWER="port32_10"; PORT6_POWER="port32_11"
+			;;
+		"$POD3IP")      POD=$POD3
+                                PORT1="pmshell -l port13"; PORT2="pmshell -l port14"
+                                PORT3="pmshell -l port15"; PORT4="pmshell -l port16"
+                                PORT5="pmshell -l port17"; PORT6="pmshell -l port18"
+                                                                                    
+                                PORT1_POWER="port32_12"; PORT2_POWER="port32_13"      
+                                PORT3_POWER="port32_14"; PORT4_POWER="port32_15"      
+                                PORT5_POWER="port32_16"; PORT6_POWER="port32_17"    
+                        ;;  
+		"$POD4IP")      POD=$POD4                                           
+                                PORT1="pmshell -l port19"; PORT2="pmshell -l port20"
+                                PORT3="pmshell -l port21"; PORT4="pmshell -l port22"
+                                PORT5="pmshell -l port23"; PORT6="pmshell -l port24"
+                                                                                    
+                                PORT1_POWER="port32_18"; PORT2_POWER="port32_19"    
+                                PORT3_POWER="port32_20"; PORT4_POWER="port32_21"    
+                                PORT5_POWER="port32_22"; PORT6_POWER="port32_23"    
+                        ;; 
+			*)	echo "ERROR: You're not a member of any pod groups."
+				exit 1
+			;;
+	esac
+
+}
+
+graphics() {
+	if [[ ${#POD} == 2 ]]; then
+		POD_NUM_DISPLAY="${POD}"
+	else
+		POD_NUM_DISPLAY="${POD} "
+	fi
+	
+	loginshell_menu="
+  [User $(whoami)]
+  [######################################################]
+  |\e[48;5;17m                                                      \e[0m|
+  |\e[38;5;19;48;5;17m    ooooo     ooo   .oooooo.   ooooo ooooooooooooo    \e[0m|
+  |\e[38;5;20;48;5;17m    '888'     '8'  d8P'  'Y8b  '888' 8'   888   '8    \e[0m|
+  |\e[38;5;21;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;27;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;33;48;5;17m     888       8  888      888  888       888         \e[0m|
+  |\e[38;5;39;48;5;17m     '88.    .8'  '88b    d88'  888       888         \e[0m|
+  |\e[38;5;45;48;5;17m       'YbodP'      '8bood8'   o888o     o888o        \e[0m|
+  |\e[38;5;159;48;5;17m             Challenge. Innovate. Connect.            \e[0m|
+  |\e[48;5;17m                                                      \e[0m|
+  +--------------\e[1;38;5;27;48;5;45m ACCESS SERVER - RACK ${RACK} \e[0m----------------+
+  |                        Pod ${POD_NUM_DISPLAY}                        |
+  |                                                      |
+  |   Welcome to the \e[1;38;5;33mUOIT Networking Lab\e[0m access server.  |
+  |                                                      |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |               \e[1;38;5;202m|\e[37;1m| \e[38;5;202m|| \e[38;5;40m|\e[37;1m| \e[38;5;27m|| |\e[37;1m| \e[38;5;40m|| \e[38;5;130m|\e[37;1m| \e[38;5;130m||\e[0m                |
+  |                                                      |
+  |   For support, visit \e[38;5;45mlabsupport.networkinglab.ca\e[0m.    |
+  |                                                      |
+  [######################################################]
+
+  [MAIN MENU]--------------------------------------------+
+  [1] R1
+  [2] R2
+  [3] R3
+  [4] SW1
+  [5] SW2
+  [6] SW3
+
+  [V] VM menu                                    [X] Exit
+  +------------------------------------------------------+"
+}
+
+set_ip_route() {
+	PODNO=$1
+	indPODIP=POD${PODNO}IP
+	
+	if [[ $(netstat -natpe | grep sshd | awk '{if ($4 == "'${!indPODIP}:22'") print $9}' | cut -d / -f1 | grep ${PPID}) ]]; then
+		ip route add 172.16.2.251/32 via ${RACKIP} src ${!indPODIP}
+		exit 0
+	fi
+}
+
+remove_route() {
+	logger "Removed leftover IP route"
+	sudo ip route del 172.16.2.251/32 &> /dev/null 2>&1
+}

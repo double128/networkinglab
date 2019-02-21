@@ -1,0 +1,103 @@
+#!/bin/bash
+
+POD_NUM=$1
+PC_NUM=$2
+
+CONFIG_PORT_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Port"
+CONFIG_SUBNET_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Subnet"
+CONFIG_SUBNET6_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_Subnet_V6"
+ROUTER_NAME="Pod${POD_NUM}_PC${PC_NUM}_Router"
+NETWORK_NAME="Pod${POD_NUM}_PC${PC_NUM}_Network"
+VM_NAME="Pod${POD_NUM}_PC${PC_NUM}_Instance"
+
+CONFIG_SG_NAME="Pod${POD_NUM}_PC${PC_NUM}_Config_SG"
+
+ok="\e[32mOK\e[0m"
+error="\e[31;1mERROR:\e[0m"
+
+## TODO: Add checks for whether or not the deletion succeeded AT THE MOMENT of deletion 
+# -> "Failed to delete" checks
+
+if [[ ! $(openstack server list -f value | awk '{if ($2 == "'${VM_NAME}'") print $3}') ]]; then
+#if ! [[ $(openstack server list | grep "$VM_NAME") ]] && ! [[ $(openstack server list | grep "$NETWORK_NAME") ]]; then
+	echo -e "\n$error VM instance has not been created. A VM cannot be deleted if it doesn't exist."
+else
+	if [[ $(ps aux | grep "DeleteInstance ${POD_NUM} ${PC_NUM} ???" | grep -v "grep" | grep -o "DeleteInstance ${POD_NUM} ${PC_NUM}" | uniq -d) ]]; then 
+	#if [[ $(ps aux | grep -v "grep" | grep "Ss+" | grep -o "DeleteInstance ${POD_NUM} ${PC_NUM}" | uniq -d) ]]; then
+		echo -e "
+  ${error} The VM \"Pod${POD_NUM} PC${PC_NUM}\" is already in the process of being deleted.
+"
+		exit 1
+	else
+		echo "[Deleting VM \"Pod${POD_NUM} PC${PC_NUM}\"]"
+	
+		# We're going to grab IDs instead of the names themselves due to names being able to be duplicated by accident ...
+		echo -n "Grabbing variables ... "
+		temp_SUBNET=$(openstack subnet list -f value)
+		CONFIG_SUBNET_ID=$(echo "$temp_SUBNET" | awk '{if ($2 == "'${CONFIG_SUBNET_NAME}'") print $1}')
+		CONFIG_SUBNET6_ID=$(echo "$temp_SUBNET" | awk '{if ($2 == "'${CONFIG_SUBNET6_NAME}'") print $1}')
+		CONFIG_PORT_ID=$(openstack port show "${CONFIG_PORT_NAME}" | grep -w id | awk '{print $4}')
+		INSTANCE_ID=$(openstack server list -f value | awk '{if ($2 == "'${VM_NAME}'") print $1}')
+		
+		#	DEPRECATED? 	CONFIG_ROUTER_ID=$(openstack router list | grep -sw $CONFIG_ROUTER_NAME | cut -f2 -d\|)
+		echo -e $ok
+
+		## Delete server ################################################################################################## 
+		
+		echo -n "Deleting server ... "
+		openstack server delete --wait ${INSTANCE_ID} &>/dev/null
+		echo -e $ok
+
+		echo -n "Verifying server deletion ... "
+		if [[ $(openstack server list | grep "${INSTANCE_ID}") ]]; then
+			echo -e "\n${error} Server has not been properly deleted. Please ask a lab attendant for assistance."
+			exit 1
+		else
+			echo -e ${ok}
+		fi
+	
+	# Remove IPv6 Subnet From Config Router
+#	echo -n "Removing IPv6 router ... "  
+#	openstack router remove subnet ${CONFIG_ROUTER_NAME} ${CONFIG_SUBNET6_ID}
+#	echo -e $ok
+	
+		# Delete ports ##
+		echo -n "Deleting ports ... "
+		openstack port delete ${CONFIG_PORT_ID} &>/dev/null
+		echo -e $ok
+	
+		echo -n "Verifying port deletion ... "
+		if [[ $(openstack port list | grep "$CONFIG_PORT_ID") ]]; then
+			echo -e "\n${error} Ports have not been properly deleted. Please ask a lab attendant for assistance."
+			exit 1
+		else
+			echo -e ${ok}
+		fi
+
+		## Delete security group ##
+		#echo -n "Deleting security group ... "
+		#openstack security group delete ${CONFIG_SG_NAME} 
+		#echo -e ${ok}
+
+		# Delete subnet ##
+	        echo -n "Deleting subnets ... "
+		openstack subnet delete $CONFIG_SUBNET_ID &>/dev/null
+                openstack subnet delete $CONFIG_SUBNET6_ID &>/dev/null
+		echo -e $ok
+        	
+		echo -n "Verifying subnet deletion ... "
+		if [[ $(openstack subnet list | grep "${CONFIG_SUBNET_ID}") ]]; then
+			echo -e "$error The IPv4 subnet has not been properly deleted. Please ask a lab attendant for assistance."
+        	        exit 1
+		fi
+		if [[ $(openstack subnet list | grep "${CONFIG_SUBNET6_ID}") ]]; then
+			echo -e "$error The IPv6 subnet has not been properly deleted. Please ask a lab attendant for assistance."
+			exit 1	
+		fi
+		echo -e $ok  	
+	
+		echo
+		echo -e "\e[32;1mSUCCESS!\e[0m The VM \"Pod${POD_NUM} PC${PC_NUM}\" was successfully deleted."
+		echo
+	fi
+fi

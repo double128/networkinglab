@@ -1,0 +1,103 @@
+#!/bin/bash
+# 
+# This script is used by the CMs to pull VM information from the server. 
+# It displays this information to a user who requests it from the loginshell menu.
+# 
+
+POD_NUM=$1	
+PC_AMOUNT=3 	# <== This variable can be modified if more VMs are added in the future
+
+getVMStatus() {
+	# Making this a lot more efficient by assigning this command to a variable
+	statusGet=$(openstack server list)
+	subnetGet=$(openstack subnet list)
+	
+	## YA HEAR THAT BOYS? ##############################
+	portGet=$(openstack port list -f value)		# This is the only way to properly get IPv6 addresses, straight from the portse's mouth
+	## WE GOT OURSELVES A BOTTLENECK!! HOOOO-EEEEEEY ###
+
+	for i in $(seq 1 ${PC_AMOUNT}); do
+		declare -g pc${i}_status="$(echo "$statusGet" | awk -v i="$i" '{if ($4 == "'Pod${POD_NUM}_PC${i}_Instance'") print $6}')" 
+		
+		# We get the subnet variables here so we can determine whether the VM has IPv4, IPv6, or both.
+		# The reason for this is simple: the IPv6 get command (openstack port show) is VERY slow.
+		# We want to avoid calling this unless absolutely necessary. 
+		declare -g pc${i}_subnet=$(echo "$subnetGet" | awk '{if ($4 == "'Pod${POD_NUM}_PC${i}_Config_Subnet'") print $8}') 
+		declare -g pc${i}_subnet6=$(echo "$subnetGet" | awk '{if ($4 == "'Pod${POD_NUM}_PC${i}_Config_Subnet_V6'") print $8'}) 
+		
+		# Declare indirects to use in our loop (ie. dereferencing pc${i}_status when i=1 will return PC1's status, indirects are cool!).
+		local ind_pcstatus="pc${i}_status"
+		local ind_pcnet4="pc${i}_subnet"
+		local ind_pcnet6="pc${i}_subnet6"
+		
+		# If IPv4 exists, then do this
+		if [ "${!ind_pcnet4}" ] && [[ "${!ind_pcstatus}" == "ACTIVE" ]]; then
+			declare -g pc${i}_ipv4=$(echo "$portGet" | grep "Pod${POD_NUM}_PC${i}_Config_Port" | awk '{print $4}' | cut -d"'" -f 2)
+		fi
+	
+		# If IPv6 exists, then do this
+		if [ "${!ind_pcnet6}" ] && [[ "${!ind_pcstatus}" == "ACTIVE" ]]; then
+			declare -g pc${i}_ipv6=$(openstack port show Pod${POD_NUM}_PC${i}_Config_Port | grep "ip_address=" | grep ":" | awk -F"=" '{print $2}' | sed -n "s/^.*'\(.*\)'.*$/\1/ p")
+		fi
+
+		local ind_pcip4="pc${i}_ipv4"
+		local ind_pcip6="pc${i}_ipv6"
+
+		# If the VM actually exists, then ...
+		if [ ${!ind_pcstatus} ]; then
+			if [[ "${!ind_pcstatus}" == "SHUTOFF" ]]; then
+				declare -g pc${i}_status="SHUTOFF"
+                        	declare -g pc${i}_ipv4="N/A"
+                        	declare -g pc${i}_ipv6="N/A"
+                        	declare -g pc${i}_subnet="N/A"
+                        	declare -g pc${i}_subnet6="N/A"
+			else
+				# If the IP addresses for IPv4 are the "dummy addresses" (found in IPCheck), then declare them unused
+				if [[ "${!ind_pcip4}" == "10.200.200.14" ]] && [[ "${!ind_pcnet4}" == "10.200.200.8/29" ]]; then
+					declare -g pc${i}_ipv4="Unused"
+					declare -g pc${i}_subnet="Unused"
+				# If the IPv6 addresses are the dummy addresses, then declare them unused
+				elif [[ "${!ind_pcip6}" == "dead:beef:babe:cafe::10" ]] && [[ "${!ind_pcnet6}" == "dead:beef:babe:cafe::/64" ]]; then
+					declare -g pc${i}_ipv6="Unused"
+					declare -g pc${i}_subnet6="Unused"
+				fi
+			fi
+		# Else we just fill the values with N/A values
+		elif [ -z "${!ind_pcstatus}" ]; then
+			declare -g pc${i}_status="NONEXISTENT"
+                        declare -g pc${i}_ipv4="N/A"
+                        declare -g pc${i}_ipv6="N/A"
+                        declare -g pc${i}_subnet="N/A"
+                        declare -g pc${i}_subnet6="N/A"
+		elif [ "${!ind_pcstatus}" ] && [ -z ${!ind_pcip4} ]; then
+			declare -g pc${i}_status="LEFTOVER DATA"
+                        declare -g pc${i}_ipv4="N/A"
+                        declare -g pc${i}_ipv6="N/A"
+                        declare -g pc${i}_subnet="N/A"
+                        declare -g pc${i}_subnet6="N/A"
+		fi
+	done
+}
+
+# We can use a function, so that if more PCs are required in the future, all you have to do
+# is change the value of the loop 
+printState() {
+	for i in $(seq 1 ${PC_AMOUNT}); do
+		local ind_state="pc${i}_status"
+		local ind_ipv4="pc${i}_ipv4"
+		local ind_sub4="pc${i}_subnet"
+		local ind_ipv6="pc${i}_ipv6"
+		local ind_sub6="pc${i}_subnet6"
+
+		echo -e "
+  [Pod${POD_NUM} PC${i}] 
+  State:		${!ind_state}
+  Host (IPv4):		${!ind_ipv4}
+  Network (IPv4):	${!ind_sub4}
+  Host (IPv6):		${!ind_ipv6}
+  Network (IPv6):	${!ind_sub6}"
+	done
+}
+
+getVMStatus
+printState

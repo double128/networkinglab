@@ -1,0 +1,2 @@
+* * * * * /sbin/logrotate -s /var/state/logrotate.status /etc/config/logrotate.conf
+0 3 * * * /etc/config/customscripts/cleanup

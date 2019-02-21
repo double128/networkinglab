@@ -1,0 +1,6 @@
+/ACTIVE/,fg=green,bold
+/SHUTOFF/,fg=red,bold
+/BUILD/,fg=yellow,bold
+/ERROR/,fg=white,bg=red
+/DELETED/,fg=red
+/NONEXISTENT/,fg=black,bold,bg=white

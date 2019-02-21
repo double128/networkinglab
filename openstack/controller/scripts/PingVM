@@ -1,0 +1,21 @@
+#!/bin/bash
+POD_NUM=$1
+PC_NUM=$2
+
+trap "echo; exit 0" SIGINT
+
+if [ -z ${POD_NUM} ] || [ -z ${PC_NUM} ]; then
+	echo "ERROR: No values supplied. Exiting."
+else
+	if [ ${POD_NUM} -le 16 ] && [ ${POD_NUM} -ge 1 ] && [ ${PC_NUM} -le 3 ] && [ ${PC_NUM} -ge 1 ]; then
+		echo -n "Grabbing variables, just a moment ... "
+		NETWORK_ID=$(openstack network list -f value | awk '{if ($2 == "'Pod${POD_NUM}_PC${PC_NUM}_Network'") print $1}')
+		QDHCP_ID="qdhcp-${NETWORK_ID}"
+		VM_IP=$(openstack port show Pod${POD_NUM}_PC${PC_NUM}_Config_Port | grep -w "fixed_ips" | awk '{print $4}' | cut -d"'" -f 2)
+	
+		echo -e "\r[Pinging VM Pod${POD_NUM} PC${PC_NUM}] ------------------------------+"
+		sudo ip netns exec "${QDHCP_ID}" ping -c 5 "${VM_IP}"
+	else
+		echo "ERROR: Invalid Pod or PC number."
+	fi
+fi

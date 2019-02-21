@@ -1,0 +1,414 @@
+#!/bin/bash
+#
+TYPE=$1
+POD_NUM=$2
+PC_NUM=$3
+
+### DUMMY ADDRESSES #############################
+						#
+DUMMY_IPV4_NET_IP="10.200.200.8/29"		#
+DUMMY_IPV4_GATEWAY_IP="10.200.200.9"		#
+DUMMY_IPV4_PORT_IP="10.200.200.14"		#
+						#
+DUMMY_IPV6_NET_IP="DEAD:BEEF:BABE:CAFE::/64"	#
+DUMMY_IPV6_GATEWAY_IP="DEAD:BEEF:BABE:CAFE::1"	#
+DUMMY_IPV6_PORT_IP="DEAD:BEEF:BABE:CAFE::10"	#
+						#
+## THESE SHOULD NEVER BE USED IN DEPLOYMENT #####
+
+# TODO: Make sure students can't use IP addresses in the 172.16.4.0/23 or w/e subnet
+# Because this will absolutely mess with Openstack
+
+error="\e[31mERROR:\e[0m"
+
+# Allow users to cleanly exit this script and return to the VM menu on the CM
+trap "echo; exit 0" SIGINT
+
+## REGEX VARIABLES ###############################################################################
+
+ipv4_regex="^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"
+ipv4_subnet_regex="^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(3[0-2]|[1-2][0-9]|[0-9]))$"
+
+ipv6_regex="^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))\s*$"
+ipv6_subnet_regex="^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))\s*(\/([0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8]))$"
+
+## FUNCTIONS #####################################################################################
+
+checkRange() {
+	for i in {1..4}; do
+	        ind_host_oct=$1_OCTET$i
+		ind_netip_min_oct=NETIP_HOSTMIN_OCTET$i
+		ind_netip_max_oct=NETIP_HOSTMAX_OCTET$i
+		
+		if [ "${!ind_host_oct}" -lt "${!ind_netip_min_oct}" ] || [ "${!ind_host_oct}" -gt "${!ind_netip_max_oct}" ]; then
+			if [[ $1 == "NETGATE" ]]; then
+        	        	echo -e "${error} Octet #${i} within the gateway IP address is not within the correct range (entered ${!ind_host_oct}, must be between ${!ind_netip_min_oct} and ${!ind_netip_max_oct})."	
+				return 1
+			elif [[ $1 == "PORTIP" ]]; then
+        	        	echo -e "${error} Octet #${i} within the host IP address is not within the correct range (entered ${!ind_host_oct}, must be between ${!ind_netip_min_oct} and ${!ind_netip_max_oct})."
+				return 1
+			else
+				return 0
+			fi
+		fi
+	done
+}
+
+
+### IPV4 CHECKS ##################################################################################
+
+ipv4Check() {
+	## CHECK NETWORK IP ###
+	local net_done=0
+	while [[ ${net_done} == 0 ]]; do
+		read -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv4 network address [192.168.0.0/24]: " CONFIG_NET_IP
+		#read -e -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv4 network address [192.168.0.0/24]: " CONFIG_NET_IP
+		
+		# Default value if user just hits ENTER
+		if [ -z $CONFIG_NET_IP ]; then 
+			echo -e "  -> USING DEFAULT (192.168.0.0/24)\n"
+			CONFIG_NET_IP=192.168.0.0/24
+			local net_done=1
+			break
+		fi
+
+		if [[ ${CONFIG_NET_IP} == ${DUMMY_IPV4_NET_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+
+			# If regex check fails, quit the script and tell them to try again.
+			if [[ ! $CONFIG_NET_IP =~ $ipv4_subnet_regex ]] && [[ ${net_done} == 0 ]]; then 
+				echo -e "${error} Incorrect IPv4 address format. Please try again."
+			else
+				local net_done=1	
+			fi
+		fi
+	done
+	
+	# Grab the values for the network's maximum and minimum values, we use this alongside regex checking to 
+	# ensure that students are entering valid addresses that will not cause OpenStack to scream in pain
+	NETIP_RANGE_CHECK=$(ipcalc $CONFIG_NET_IP)
+	NETIP_HOSTMIN_IP=$(echo "$NETIP_RANGE_CHECK" | grep "HostMin:" | awk '{print $2}')
+	NETIP_HOSTMAX_IP=$(echo "$NETIP_RANGE_CHECK" | grep "HostMax:" | awk '{print $2}')
+	
+	# Divide min and max IP addresses into 4 octets for checking against the gateway and host IPs
+	for i in {1..4}; do
+		declare NETIP_HOSTMIN_OCTET$i=$(echo "$NETIP_HOSTMIN_IP" | awk -v i="$i" -F\. '{print $i}')
+	done
+	
+	for i in {1..4}; do
+		declare NETIP_HOSTMAX_OCTET$i=$(echo "$NETIP_HOSTMAX_IP" | awk -v i="$i" -F\. '{print $i}')
+	done
+		
+
+	## CHECK GATEWAY IP ###
+	# Ok, let's explain how this code works... 
+	
+	# Set a variable to 0 so we can use a while loop and set the value when a check is successful
+	local gate_done=0
+	while [[ ${gate_done} == 0 ]]; do
+		#read -e -p "Enter the VM \"Pod ${POD_NUM} PC${PC_NUM}\" IPv4 gateway address [192.168.0.1]: " CONFIG_NET_GATEWAY 
+		read -p "Enter the VM \"Pod ${POD_NUM} PC${PC_NUM}\" IPv4 gateway address [192.168.0.1]: " CONFIG_NET_GATEWAY 
+	
+		if [ -z $CONFIG_NET_GATEWAY ]; then 
+			echo -e "  -> USING DEFAULT (192.168.0.1)\n"
+			CONFIG_NET_GATEWAY=192.168.0.1
+		fi
+		
+		if [[ ${CONFIG_NET_GATEWAY} == ${DUMMY_IPV4_GATEWAY_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+			local ok=0
+			if [[ ! $CONFIG_NET_GATEWAY =~ $ipv4_regex ]] && [[ ${gate_done} == 0 ]]; then 
+				echo -e "${error} Incorrect IPv4 address format. Please try again."
+			else
+				local ok=1
+			fi
+			
+			for i in {1..4}; do
+				declare NETGATE_OCTET$i=$(echo "$CONFIG_NET_GATEWAY" | awk -v i="$i" -F\. '{print $i}')
+			done
+	
+			if [[ ${ok} == 1 ]]; then
+				# Feed the octets into the checkRange function 
+				checkRange NETGATE
+				
+				# If the return value is 0 (success) ...
+				if [[ $? == 0 ]]; then
+					local gate_done=1
+				fi
+				# If the return value doesn't equal 0, then the script will make users enter in the gateway IP again
+			fi
+		fi
+	done
+
+
+	## CHECK HOST IP ###
+	local port_done=0
+	while [[ ${port_done} == 0 ]]; do
+		if [[ ${PC_NUM} == "1" ]]; then PC_IP="192.168.0.10"
+		elif [[ ${PC_NUM} == "2" ]]; then PC_IP="192.168.0.20"
+		elif [[ ${PC_NUM} == "3" ]]; then PC_IP="192.168.0.30"
+		fi
+		
+		#read -e -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv4 host address [${PC_IP}]: " CONFIG_PORT_IP
+		read -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv4 host address [${PC_IP}]: " CONFIG_PORT_IP
+
+		if [ -z $CONFIG_PORT_IP ]; then
+			echo -e "  -> USING DEFAULT (${PC_IP})"
+			CONFIG_PORT_IP=${PC_IP}
+			local port_done=1
+			break
+		fi
+
+		if [[ ${CONFIG_PORT_IP} == ${DUMMY_IPV4_PORT_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+			# Check if the user has entered in the same IP as the gateway LOL
+			# NOTE: This check was added because this is most definitely something I would do
+			if [[ ${CONFIG_PORT_IP} == ${CONFIG_NET_GATEWAY} ]] && [[ ${port_done} == 0 ]]; then
+				echo -e "$error Host IP can't be the same as the gateway IP. Try again."
+			else
+				local ok=0
+				if [[ ! $CONFIG_PORT_IP =~ $ipv4_regex ]] && [[ ${ok} == 0 ]]; then 
+					echo -e "${error} Incorrect host IP address format. Try again."
+				else
+					local ok=1
+				fi
+				
+				if [[ ${ok} == 1 ]]; then
+					for i in {1..4}; do
+						declare PORTIP_OCTET$i=$(echo "$CONFIG_PORT_IP" | awk -v i="$i" -F\. '{print $i}')
+					done
+				
+					checkRange PORTIP
+					if [[ $? == 0 ]]; then
+						# If the gateway IP is equal to the first IP of the subnet ...
+						if [[ $NETGATE_OCTET4 == $NETIP_HOSTMIN_OCTET4 ]]; then
+							# Grab the first 2 IP addresses after the gateway, which is the 
+							# first IP address in the subnet 
+							declare -i DNS_IP_1=$(( $NETGATE_OCTET4 + 1 ))
+							declare -i DNS_IP_2=$(( $NETGATE_OCTET4 + 2 ))
+							
+							# There is a VERY GOOD reason why this is needed.
+							# The first two IP addresses after the gateway address are reserved for the DNS nameservers used for communication between the VM and the server.
+							# If you do not prevent users from creating hosts with such IP addresses, then you will not be able to spawn the VM and the error message is vague/nonexistent.
+							# So this is a safety thing to prevent users from messing up. Idiot proof!	
+							# TODO: is this still relevant?
+							if [[ $PORTIP_OCTET4 == $DNS_IP_1 ]] || [[ $PORTIP_OCTET4 == $DNS_IP_2 ]]; then
+								echo -e "$error Host IP overlaps with the DNS nameserver IP addresses for the network ($NETGATE_OCTET1.$NETGATE_OCTET2.$NETGATE_OCTET3.$DNS_IP_1 and $NETGATE_OCTET1.$NETGATE_OCTET2.$NETGATE_OCTET3.$DNS_IP_2)."
+							else 
+								local port_done=1
+							fi
+						else
+							declare -i DNS_IP_1=$(( $NETIP_HOSTMIN_OCTET4 + 0 ))
+							declare -i DNS_IP_2=$(( $NETIP_HOSTMIN_OCTET4 + 1 ))
+							
+							if [[ $PORTIP_OCTET4 == $DNS_IP_1 ]] || [[ $PORTIP_OCTET4 == $DNS_IP_2 ]]; then
+								echo -e "$error Host IP overlaps with the DNS nameserver IP addresses for the network."
+							else
+								local port_done=1
+							fi
+						fi
+					fi
+				fi
+			fi
+		fi
+	done
+}	
+
+### IPV6 CHECKS ##################################################################################
+
+ipv6Check() {
+	local net6_done=0
+	while [[ ${net6_done} == 0 ]]; do
+		#read -e -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv6 network address [2001:DB8:ACAD:C::/64]: " CONFIG_NET6_IP
+		read -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv6 network address [2001:DB8:ACAD:C::/64]: " CONFIG_NET6_IP
+
+		# Make IPv6 addresses all lowercase 
+		CONFIG_NET6_IP=$(echo $CONFIG_NET6_IP | awk '{print tolower($0)}')
+
+		if [ -z $CONFIG_NET6_IP ]; then 
+			echo -e "  -> USING DEFAULT (2001:db8:acad:c::/64)\n"
+			CONFIG_NET6_IP="2001:db8:acad:c::/64"
+			net6_done=1
+		fi
+
+		if [[ ${CONFIG_NET6_IP} == ${DUMMY_IPV6_NET_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+			if [[ ! $CONFIG_NET6_IP =~ $ipv6_subnet_regex ]]; then 
+				echo -e "${error} Incorrect format for network IP address. Please try again."
+			else 
+				net6_done=1
+			fi	
+		fi
+	done
+
+	local gate6_done=0
+	while [[ ${gate6_done} == 0 ]]; do
+		#read -e -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv6 gateway address [2001:DB8:ACAD:C::1]: " CONFIG_NET6_GATEWAY
+		read -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv6 gateway address [2001:DB8:ACAD:C::1]: " CONFIG_NET6_GATEWAY
+		CONFIG_NET6_GATEWAY=$(echo $CONFIG_NET6_GATEWAY | awk '{print tolower($0)}')
+		
+		if [ -z $CONFIG_NET6_GATEWAY ]; then 
+			echo -e "  -> USING DEFAULT (2001:db8:acad:c::1)\n"
+			CONFIG_NET6_GATEWAY="2001:db8:acad:c::1"
+			gate6_done=1
+		fi
+
+		if [[ ${CONFIG_NET6_GATEWAY} == ${DUMMY_IPV6_GATEWAY_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+			if [[ ! $CONFIG_NET6_GATEWAY =~ $ipv6_regex ]]; then
+				echo -e "${error} Incorrect format for gateway IP address. Please try again."
+			else 
+				gate6_done=1
+			fi
+		fi
+	done
+
+	local port6_done=0
+	while [[ ${port6_done} == 0 ]]; do
+		if [[ ${PC_NUM} == "1" ]]; then PC_IP6="2001:db8:acad:c::10"
+                elif [[ ${PC_NUM} == "2" ]]; then PC_IP6="2001:db8:acad:c::20"
+                elif [[ ${PC_NUM} == "3" ]]; then PC_IP6="2001:db8:acad:c::30"
+		fi
+		
+		read -e -p "Enter the VM \"Pod${POD_NUM} PC${PC_NUM}\" IPv6 host address [${PC_IP6}]: " CONFIG_PORT6_IP
+		CONFIG_PORT6_IP=$(echo $CONFIG_PORT6_IP | awk '{print tolower($0)}')
+
+		if [ -z $CONFIG_PORT6_IP ]; then 
+			echo -e "  -> USING DEFAULT (${PC_IP6})"
+			CONFIG_PORT6_IP="${PC_IP6}"
+			port6_done=1
+		fi
+
+		if [[ ${CONFIG_PORT6_IP} == ${DUMMY_IPV6_PORT_IP} ]]; then
+			echo -e "${error} This address is reserved. Please try again."
+		else
+			if [[ ! $CONFIG_PORT6_IP =~ $ipv6_regex ]]; then 
+				echo -e "${error} Incorrect format for host IP address. Please try again."
+			else 
+				if [[ $CONFIG_PORT6_IP == $CONFIG_NET6_GATEWAY ]]; then
+					echo -e "$error Host IP cannot be the same as the gateway IP."
+				else
+					port6_done=1
+				fi
+			fi
+		fi
+	done
+}
+
+### VALIDATING THAT THE USER ACTUALLY WANTS WHAT THEY ENTERED ###################################
+
+ipv4Confirm() {
+	echo
+	echo "==> IPv4 ==================================================|"
+	ipv4Check
+	echo
+	echo "You have entered the following addresses for VM \"Pod${POD_NUM} PC${PC_NUM}\":"
+	echo "  Network IP:	${CONFIG_NET_IP}"
+	echo "  Gateway IP:	${CONFIG_NET_GATEWAY}"
+	echo "  Host IP:	${CONFIG_PORT_IP}"
+	read -p "Are these values correct? [Y/N]: " -r choice
+	case "$choice" in
+		[yY][eE][sS]|[yY]|"")    
+			done=1
+			echo
+			echo "Addresses OK, spawning instance ... "
+			echo
+			exec /home/serveradmin/SpawnInstance "${POD_NUM}" "${PC_NUM}" "${CONFIG_NET_IP}" "${CONFIG_NET_GATEWAY}" "${CONFIG_PORT_IP}" "${DUMMY_IPV6_NET_IP}" "${DUMMY_IPV6_GATEWAY_IP}" "${DUMMY_IPV6_PORT_IP}" "${TYPE}"
+		;;
+		*)	
+		;;
+	esac
+}
+
+ipv6Confirm() {
+        echo
+	echo "==> IPv6 ==================================================|"
+        ipv6Check
+        echo
+	echo "You have entered the following addresses for VM \"Pod${POD_NUM} PC${PC_NUM}\":"
+        echo "  Network IP:	${CONFIG_NET6_IP}"
+        echo "  Gateway IP:	${CONFIG_NET6_GATEWAY}"
+        echo "  Host IP:	${CONFIG_PORT6_IP}"
+	read -p "Are these values correct? [Y/N]: " -r choice
+        case "$choice" in
+                [yY][eE][sS]|[yY]|"")    
+			done=1
+                        echo
+                        echo "Addresses OK, spawning instance ... "
+			echo
+			exec /home/serveradmin/SpawnInstance "${POD_NUM}" "${PC_NUM}" "${DUMMY_IPV4_NET_IP}" "${DUMMY_IPV4_GATEWAY_IP}" "${DUMMY_IPV4_PORT_IP}" "${CONFIG_NET6_IP}" "${CONFIG_NET6_GATEWAY}" "${CONFIG_PORT6_IP}" "${TYPE}"
+		;;
+		*)	
+		;;
+	esac
+}
+
+bothConfirm() { 
+	echo
+	echo "==> IPv4 ==================================================|"
+	
+	local ok=0
+	while [[ ${ok} == 0 ]]; do
+		ipv4Check
+		echo "You have entered the following addresses for VM \"Pod${POD_NUM} PC${PC_NUM}\":"
+		echo "  Network IP:	${CONFIG_NET_IP}"
+        	echo "  Gateway IP:	${CONFIG_NET_GATEWAY}"
+        	echo "  Host IP:	${CONFIG_PORT_IP}"
+		read -p "Are these values correct? [Y/N]: " -r choice
+		case "$choice" in
+			[yY][eE][sS]|[yY]|"")	
+				local ok=1
+			;;
+			*)	local ok=0
+			;;	
+		esac
+	done
+
+	echo
+	echo "==> IPv6 ==================================================|"
+	
+	local ok=0
+	while [[ ${ok} == 0 ]]; do
+		ipv6Check
+		echo "You have entered the following addresses for VM \"Pod${POD_NUM} PC${PC_NUM}\":"
+		echo "  Network IP:	${CONFIG_NET6_IP}"
+        	echo "  Gateway IP:	${CONFIG_NET6_GATEWAY}"
+        	echo "  Host IP:  	${CONFIG_PORT6_IP}"
+        	read -p "Are these values correct? [Y/N]: " -r choice
+		case "$choice" in
+			[yY][eE][sS]|[yY]|"")	
+				local ok=1
+				done=1
+                        	echo
+				echo "Addresses OK, spawning instance ... "
+				echo
+				exec /home/serveradmin/SpawnInstance "${POD_NUM}" "${PC_NUM}" "${CONFIG_NET_IP}" "${CONFIG_NET_GATEWAY}" "${CONFIG_PORT_IP}" "${CONFIG_NET6_IP}" "${CONFIG_NET6_GATEWAY}" "${CONFIG_PORT6_IP}" "${TYPE}"
+			;;
+			*)	local ok=0	
+			;;
+		esac
+	done		
+}
+
+### MAIN ####################################################################
+
+echo "
+[Pod${POD_NUM} PC${PC_NUM} IP Assignment]------------------+
+> Press ENTER to set IPs to their [default] values
+> Press CTRL+C to cancel and return to the main menu"
+
+done=0
+while [[ ${done} == 0 ]]; do
+	if [[ "$TYPE" == "ipv4" ]]; then
+		ipv4Confirm
+	elif [[ "$TYPE" == "ipv6" ]]; then 
+		ipv6Confirm
+	elif [[ "$TYPE" == "both" ]]; then
+		bothConfirm
+	fi
+done
