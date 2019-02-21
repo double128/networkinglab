@@ -1,1 +1,2 @@
-# Networking Lab
+# NETWORKING LAB
+This repository contains all the work I've done for the networking lab where I work over a period of approximately 1 year. This project was a pretty big undertaking for me as I basically knew nothing about Bash scripting prior to taking the job.
