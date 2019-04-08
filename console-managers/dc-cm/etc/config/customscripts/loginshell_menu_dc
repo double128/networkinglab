@@ -15,8 +15,8 @@ remove_route	# Remove the leftover IP route from loginshell_ipassign IMMEDIATELY
 rackCheck	# Set the variables for this CM
 variablesSSH	# Get variables to check for SSH IP addresses
 traps		# Get traps
-getPortNumbers	# Get the pmshell commands for each port
-colours
+#getPortNumbers	# DEPRECATED
+#colours	# DEPRECATED
 graphics
 
 ## MAIN ################################################################

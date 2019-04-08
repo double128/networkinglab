@@ -5,3 +5,5 @@ Create it as follows:
 	ln -s loginshell_menu_dc loginshell_menu
 
 Now the DC CMs will work properly.
+
+You will also need the private keys for the Openstack VMs to be placed in the "keys" folder. You can get these private keys off of the Openstack web GUI and then scp them to the keys folder. The files exist, but there's nothing in them (I wasn't going to upload private keys to a repository). You will need to add the keys here yourself.

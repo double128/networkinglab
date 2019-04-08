@@ -21,6 +21,10 @@ graphics		# Get text menu graphics
 ## MAIN ###########################################################################
 clear
 
+# NOTE: The following two lines are used to display special warning message (e.g. upcoming maintenance) when users log in. Comment them out when not needed.
+#echo -e "\n\e[41mPlease note that the power to the SIRC building will be shut off on Sunday March 24th for maintenance.\nAs such, the equipment will be unavailable starting at midnight on Sunday until late Sunday evening.\n\e[0m"
+#read -p "Press [Enter] to continue..."
+
 D=0
 while [[ ${D} == 0 ]]; do
 	clear

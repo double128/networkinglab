@@ -22,6 +22,8 @@ rackCheck() {
 	
 # Trap specific command invocations
 traps() {
+	# Testing don't fuck with this
+	trap "sudo ip route add 172.16.0.251/32 via `ifconfig eth0 | grep "inet addr" | cut -d':' -f2 | cut -d' ' -f1` src `echo $SSH_CONNECTION | cut -d' ' -f3`" EXIT	# Trap CTRL+D and other exit evocations
 	trap "" SIGINT SIGQUIT SIGSTP 	# Trap CTRL+C and CTRL+Z; basically, prevent users from accidentally logging themselves out
 	
 	# Old traps for pre-pmshell change
