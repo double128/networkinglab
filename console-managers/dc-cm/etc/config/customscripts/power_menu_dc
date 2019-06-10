@@ -1,6 +1,3 @@
-#!/bin/bash
-# THIS DECLARATION IS TEMP WILL BE JUST A FUNCTIONS FILE
-
 
   ##################################
   # 	 POWER MENU FUNCTIONS	   #
@@ -36,35 +33,210 @@ change_state_single() {
 	export STATE_${DEV_VAR}=$(snmpwalk -v 2c -c tripplite 10.41.30.233 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${DEV_NUM} | awk '{print $NF}' | sed 's/1/OFF/; s/2/ON/')
 }
 
+change_state_all_cycle(){
+	for p in 0 1 2 3 4 5; do
+		declare POLL_$p=$(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${p}]} | awk -F ":" '{print $NF}' | xargs)
+		
+		ind_p=POLL_$p
+		
+		#In this scenario since were only cycling powered ON devices, we can add the powered OFF devices, but they will be ignored for the purpose of this function
+		if [[ ${!ind_p} == 2 ]]; then
+			POWER_ARRAY[$p]=1
+		elif [[ ${!ind_p} == 1 ]]; then
+			POWER_ARRAY[$p]=0
+		fi
+		#echo "${POWER_ARRAY[${p}]}"
+		#echo "${!ind_p}"
+		#echo "POLL_$P"
+		
+	done
+	
+
+		
+	for r in 0 1 2 3 4 5; do
+		#grab states that need to be cycled
+		if [[ ${POWER_ARRAY[$r]} == 1 ]]; then
+			#snmpset the power cycle for powered on units and store the result
+			declare STATE_CHANGE_$r=$(snmpset -v 2c -c tripplite ${PDU_IP} 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.${PDU_LOADS[$r]} i ${POWER_OPT} | awk -F ":" '{print $NF}' | xargs)
+		fi
+	done
+	local x=0
+	local g=0	
+	local t=0; while [[ $t == 0 ]]; do
+		echo -n "  Updateing Power Supply..." 
+		for c in 0 1 2 3 4 5; do
+			ind_c=STATE_CHANGE_$c
+			
+			#If something is stored in a variable, it means its one of the devices being power cycled
+			if [[ ! -z ${!ind_c} ]]; then
+				
+				
+				#This loop will wait for plugs to cycle before continuing. It does so through a series of inbedded
+				#loops inorder to check and measure the states of the plugs
+				l=0; while [[ $l == 0 ]]; do
+				
+					#Since this first state it will read is usually ON, this loops first. It contains
+					#A IF condition to track whether its returning to the ON position or first time
+					#This is because we need to wait for it to go OFF before returning to ON
+					while [[ $(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${c}]} | awk -F ":" '{print $NF}' | xargs | grep "2" ) ]]; do
+						echo -n "."
+						#echo "on"
+						sleep 1
+						if [[ "$g" -gt 0 ]]; then
+							#echo "bye"
+							sleep 3
+							l=1
+							x=0
+							break
+						fi
+					done
+					#Here the loop checks when the plug goes into the OFF state. Once it does, it adds a counter
+					#to variable "g" to indicate that it has been in the OFF state, before being returned to ON
+					while [[ $(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${c}]} | awk -F ":" '{print $NF}' | xargs | grep "1" ) ]]; do
+						echo -n "."
+						#echo "off"
+						sleep 1
+						g=1
+					done
+				done
+				
+				if [[ $(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${c}]} | awk -F ":" '{print $NF}' | xargs | grep "2" ) ]]; then
+				#zeroize
+				unset $ind_c
+				
+				#increment index to fit the STATE_X variables
+				#TODO: SET STATE_X to 0-5 rather than 1-6 to avoid this little bit
+				inc=$((c+1))
+				
+				#export STATE_$inc=$(echo "2" | sed 's/1/OFF/; s/2/ON')
+				fi
+			fi
+			
+			if [ -z $STATE_CHANGE_0 ] && [ -z $STATE_CHANGE_1 ] && [ -z $STATE_CHANGE_2 ] && [ -z $STATE_CHANGE_3 ] && [ -z $STATE_CHANGE_4 ] && [ -z $STATE_CHANGE_5 ]; then
+				t=1
+				break
+			fi
+		done
+	
+		echo -n "."
+		sleep 1
+	done
+		
+	#echo "WE DID IT YA!!"
+	#read -p "" varb1
+	power_menu
+	break
+}
+
 change_state_all() { 
 	local POWER_OPT=$1
 	case $POWER_OPT in
 		1) local WHAT_ME_DOING_QUESTION_MARK="OFF";;
 		2) local WHAT_ME_DOING_QUESTION_MARK="ON";;
-		3) local WHAT_ME_DOING_QUESTION_MARK="CYCLE";;
+		3) local WHAT_ME_DOING_QUESTION_MARK="CYCLE";; # TODO: You need to move the power cycle functionality in its own loop because power cycling works differently than powering off/on
 	esac
-	
+
 	local D=0; while [[ $D == 0 ]]; do
 		read -p "  Are you sure you want to POWER ${WHAT_ME_DOING_QUESTION_MARK} all devices? [Y/N]: " choice
 		case $choice in
-			y|Y)	# Grab state of last outlet in pod group
-				LAST_LOAD=$(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[5]} | awk -F ":" '{print $NF}' | awk '{$1=$1};1')
+			y|Y) 	
+				if [[ $POWER_OPT -eq 3 ]]; then
+					change_state_all_cycle
+					local D=1
+					break
+				fi	
 				
-				# Set power state for all loads in pod
-				for load in "${PDU_LOADS[@]}"; do
-					snmpset -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.${load} i $POWER_OPT &
+				echo -n "  Updating power states"
+				POWER_ARRAY=()
+				
+				for i in 0 1 2 3 4 5; do
+					# Create variables for the status of each plug/load in $PDU_LOADS
+        				declare POLL_$i=$(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${i}]} | awk -F ":" '{print $NF}' | xargs)
+
+  				      	# Create an indirect variable so we can access the variable created above at this specific index in the for loop
+        				ind_v=POLL_$i
+
+        				# If the poll result is equal to the power state change, we can assume that we don't have to touch this plug because it's already ON or OFF
+        				# (Basically, we don't want to switch on a device that's already set to ON, it's a waste of time and effort)
+        				
+					if [[ ${!ind_v} == $POWER_OPT ]]; then
+                				# If the plug state and power change option are the same, push "0" to the same index as the plug in $PDU_LOADS to indicate that we should ignore this plug
+                				POWER_ARRAY[$i]=0
+        				else
+                				# If they're opposites, push "1" to the same index as the plug in $PDU_LOADS to indicate that this plug's status has to be changed
+                				POWER_ARRAY[$i]=1
+        				fi
 				done
 				
-				# Wait for power state to change
-				while [[ $(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[5]} | awk '{print $NF}' | awk '{$1=$1};1' | grep $LAST_LOAD) ]]; do
+					
+				# If all POWER_ARRAY elements are equal to 0, then nothing can be done because the moron tried to turn off/on devices that are all off/on already
+				
+				# echo "You cannot POWER ${WHAT_ME_DOING_QUESTION_MARK} all devices if they are all already POWERED ${WHAT_ME_DOING_QUESTION_MARK}." 
+				
+				local watermark=${POWER_ARRAY[0]}
+				
+				#This FOR and IF will run through the array and determine whether the user is attempting to turn off/on all devices when theyre already in that state
+				local x=0
+				local B=0
+				for b in "${POWER_ARRAY[@]}"; do
+					B=$((B+1))
+					if [[ "$watermark" != "$b" ]]; then
+						x=$((x+1))
+						break
+			
+					elif [ $watermark -eq 1 ]; then
+						break
+						
+					elif [ $x -eq 0 -a $B -eq 6 ]; then
+						D=1
+						echo -e "\n\n  You cannot turn ${WHAT_ME_DOING_QUESTION_MARK} devices when they're already all in the ${WHAT_ME_DOING_QUESTION_MARK} state!!"
+						sleep 5
+						power_menu
+					fi
+				done
+				
+				
+				for r in 0 1 2 3 4 5; do
+        				# Grab all plugs that definitely need their state changed
+        					if [[ ${POWER_ARRAY[$r]} == 1 ]]; then
+                					# snmpset the state change and store the result to a variable
+                					declare STATE_CHANGE_$r=$(snmpset -v 2c -c tripplite ${PDU_IP} 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.6.1.${PDU_LOADS[$r]} i ${POWER_OPT} | awk -F ":" '{print $NF}' | xargs)
+        					fi
+				done
+
+				t=0; while [[ $t == 0 ]]; do
+        				for s in 0 1 2 3 4 5; do
+                				ind_s=STATE_CHANGE_$s
+
+                				# If there is something stored at this variable (ergo, it was set in the above for loop) then continue
+                				if [[ ! -z ${!ind_s} ]]; then
+                        				# Check the status of the plug and compare to $POWER_OPT; once they're equal that means that the state has changed successfully
+                        				if [[ $(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[${s}]} | awk -F ":" '{print $NF}' | xargs | grep "${POWER_OPT}") ]]; then
+                                				# Once the values are equal, zeroise the variable so that the loop doesn't check for it anymore
+                                				unset $ind_s
+								
+								# Increment index by 1 (since the arrays start at 0 and the STATE_X variables start at 1)
+								# TODO: Change STATE_X variables to be 0-5 intead of 1-6; you'll have to make other changes to single state change function as well to remove the index increment
+								inc=$((s+1))
+								
+	                                			# We can assume that the new state of the plug is equal to $POWER_OPT so we don't have to snmpwalk and set a new variable or anything
+	                                			export STATE_$inc=$(echo $POWER_OPT | sed 's/1/OFF/; s/2/ON/')
+	                        			fi
+	                			fi
+	
+	                			# Check to see if all variables are empty before quitting (as all the states have been changed)
+	                			if [ -z $STATE_CHANGE_0 ] && [ -z $STATE_CHANGE_1 ] && [ -z $STATE_CHANGE_2 ] && [ -z $STATE_CHANGE_3 ] && [ -z $STATE_CHANGE_4 ] && [ -z $STATE_CHANGE_5 ]; then
+	                        			t=1
+	                        			break
+	                			fi
+       	 				done
+        				
 					echo -n "."
-				done
-				
-				for i in {1 2 3 4 5 6}; do
-					export STATE_${i}=$(snmpwalk -v 2c -c tripplite $PDU_IP 1.3.6.1.4.1.850.1.1.3.2.3.3.1.1.4.1.${PDU_LOADS[$i]} | awk '{print $NF}' | sed 's/1/OFF/; s/2/ON/')
+					sleep 1
 				done
 				
 				local D=1
+				power_menu
 			;;
 			n|N) local D=1; break;;
 			*) echo "Invalid choice.";;
@@ -145,10 +317,10 @@ process_pod() {
 	esac
 	
 	case $POD in
-		1) PDU_IP=$PDU1IP; PDU_LOADS=(12 11 10 9 8 7);;			# Load 12 = R1; Load 7 = SW3
-		2) PDU_IP=$PDU1IP; PDU_LOADS=(23 22 21 20 19 18);;		# PDU1 contains the RACK FAN @ Load 24
-		3) PDU_IP=$PDU2IP; PDU_LOADS=(12 11 10 9 8 7);;
-		4) PDU_IP=$PDU2IP; PDU_LOADS=(24 23 22 21 20 19);;		# PDU2 contains the CM @ Load 18
+		1) PDU_IP=$PDU1IP; PDU_LOADS=(23 22 21 20 19 18);;		# PDU1 contains the RACK FAN @ Load 24
+		2) PDU_IP=$PDU1IP; PDU_LOADS=(12 11 10 9 8 7);;			# Load 12 = R1; Load 7 = SW3
+		3) PDU_IP=$PDU2IP; PDU_LOADS=(24 23 22 21 20 19);;		# PDU2 contains the CM @ Load 18
+		4) PDU_IP=$PDU2IP; PDU_LOADS=(12 11 10 9 8 7);;
 	esac
 }
 
@@ -162,9 +334,6 @@ power_menu() {
 	local D=0; while [[ $D == 0 ]]; do
 		clear
 		echo -e "
-  Pod = $POD
-  Rack = $RACK
-  PDU IP = $PDU_IP
   +---------------------------------------+
   R1 Status:	$STATE_1
   R2 Status:	$STATE_2
@@ -186,10 +355,3 @@ power_menu() {
 		esac
 	done
 }
-
-# variable "POD" will be equal to the current user's pod, so keep that in mind :)
-# for now I will temporarily set it to say I'm in pod1 on rack1
-POD=1
-RACK=1
-
-power_menu
