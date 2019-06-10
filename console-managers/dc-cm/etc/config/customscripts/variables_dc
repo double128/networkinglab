@@ -123,7 +123,8 @@ graphics() {
   [5] SW2
   [6] SW3
 
-  [V] VM menu                                    [X] Exit
+  [V] VM menu                
+  [P] Power menu                                  [X] Exit
   +------------------------------------------------------+"
 }
 
