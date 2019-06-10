@@ -316,11 +316,12 @@ process_pod() {
 		4) PDU1IP=10.41.30.239; PDU2IP=10.41.30.240;;
 	esac
 	
+	# The POD variables are exported in variables_dc, so we can use them here to determine pod-related variables
 	case $POD in
-		1) PDU_IP=$PDU1IP; PDU_LOADS=(23 22 21 20 19 18);;		# PDU1 contains the RACK FAN @ Load 24
-		2) PDU_IP=$PDU1IP; PDU_LOADS=(12 11 10 9 8 7);;			# Load 12 = R1; Load 7 = SW3
-		3) PDU_IP=$PDU2IP; PDU_LOADS=(24 23 22 21 20 19);;		# PDU2 contains the CM @ Load 18
-		4) PDU_IP=$PDU2IP; PDU_LOADS=(12 11 10 9 8 7);;
+		${POD1}) PDU_IP=$PDU1IP; PDU_LOADS=(23 22 21 20 19 18);;		# PDU1 contains the RACK FAN @ Load 24
+		${POD2}) PDU_IP=$PDU1IP; PDU_LOADS=(12 11 10 9 8 7);;			# Load 12 = R1; Load 7 = SW3
+		${POD3}) PDU_IP=$PDU2IP; PDU_LOADS=(24 23 22 21 20 19);;		# PDU2 contains the CM @ Load 18
+		${POD4}) PDU_IP=$PDU2IP; PDU_LOADS=(12 11 10 9 8 7);;
 	esac
 }
 
